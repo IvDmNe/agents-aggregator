@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { Session, Source } from '../../shared/types';
 import type { BlurredProjects } from '../hooks/useBlurredProjects';
 import { AgentChip, LivePip } from './AgentChip';
@@ -43,7 +44,7 @@ export function SessionList({ theme, treatment, dense, sessions, sources, active
           <SessionRow key={s.id}
             theme={theme} treatment={treatment} dense={dense} loud={loud}
             session={s} sources={sources} active={s.id === activeId}
-            onClick={() => setActiveId(s.id)}
+            onSelect={setActiveId}
             isBlurred={blurred.has(s.cwd)}
           />
         ))}
@@ -65,18 +66,23 @@ interface SessionRowProps {
   session: Session;
   sources: Source[];
   active: boolean;
-  onClick: () => void;
+  /** Called with the session id when the row is clicked. Pass a stable
+   *  reference — `SessionRow` is memoized. */
+  onSelect: (id: string) => void;
   isBlurred: boolean;
 }
 
-function SessionRow({ theme, treatment, dense, loud, session: s, sources, active, onClick, isBlurred }: SessionRowProps) {
+const SessionRow = memo(function SessionRow({
+  theme, treatment, dense, loud, session: s, sources, active, onSelect, isBlurred,
+}: SessionRowProps) {
   const t = themes[theme];
   const padY = dense ? 9 : 12;
   const sourceLabel = (sources.find((x) => x.id === s.sourceId) || { label: '' }).label;
   const shortSource = sourceLabel.match(/\((.+?)\)/)?.[1] || sourceLabel;
+  const handleClick = () => onSelect(s.id);
 
   return (
-    <div onClick={onClick} style={{
+    <div onClick={handleClick} style={{
       padding: `${padY}px 14px`,
       borderBottom: `1px solid ${t.border2}`,
       borderLeft: active ? `2px solid ${t.accent}` : '2px solid transparent',
@@ -126,4 +132,4 @@ function SessionRow({ theme, treatment, dense, loud, session: s, sources, active
       </div>
     </div>
   );
-}
+});

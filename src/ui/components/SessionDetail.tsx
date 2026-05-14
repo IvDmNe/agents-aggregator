@@ -226,7 +226,7 @@ function ChatView({ theme, treatment, entries, session, selectedEntryId, setSele
                     compact={compact} treatment={treatment}
                     isNew={i === entries.length - 1}
                     selected={e.id === selectedEntryId}
-                    onSelect={() => setSelectedEntryId(e.id)} />
+                    onSelect={setSelectedEntryId} />
       ))}
     </div>
   );

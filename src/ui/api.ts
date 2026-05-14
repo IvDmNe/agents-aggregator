@@ -69,8 +69,16 @@ export function useEntries(sessionId: string | undefined, refreshKey: number): {
   const [data, setData] = useState<Entry[]>([]);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  // Track which session the current `data` belongs to so a session switch
+  // doesn't render the previous session's entries against the new session's
+  // metadata for one frame before the new fetch resolves.
+  const dataForSessionRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (!sessionId) { setData([]); return; }
+    if (!sessionId) { setData([]); dataForSessionRef.current = undefined; return; }
+    if (dataForSessionRef.current !== sessionId) {
+      setData([]);
+      dataForSessionRef.current = sessionId;
+    }
     setLoading(true);
     const ac = new AbortController();
     const parts = splitSessionId(sessionId);

@@ -1,6 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { memo, type CSSProperties, type ReactNode } from 'react';
 import type { Entry, EntryImage, Session } from '../../shared/types';
 import { LivePip } from './AgentChip';
+import { DeferredMount } from './DeferredMount';
 import { PierreDiff } from './PierreDiff';
 import { previewFromArgs, useFilePreview } from './FilePreview';
 import { Markdown } from './Markdown';
@@ -19,10 +20,13 @@ interface EntryBlockProps {
   treatment: AgentTreatment;
   isNew: boolean;
   selected: boolean;
-  onSelect: () => void;
+  /** Called with the entry id when the row is clicked. Keep this reference
+   *  stable (e.g. a `useState` setter) — `EntryBlock` is memoized. */
+  onSelect: (id: string) => void;
 }
 
-export function EntryBlock({ entry: e, theme, session, compact, isNew, selected, onSelect }: EntryBlockProps) {
+function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, onSelect }: EntryBlockProps) {
+  const handleSelect = () => onSelect(e.id);
   const t = themes[theme];
   const { open: openPreview } = useFilePreview();
   const isUser = e.role === 'user';
@@ -41,7 +45,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
 
   if (isThinking) {
     return (
-      <div onClick={onSelect} style={{
+      <div onClick={handleSelect} style={{
         ...baseStyle,
         background: t.panel,
         border: `1px solid ${selected ? t.accent : t.border2}`,
@@ -72,7 +76,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
       if (preview) openPreview(preview);
     };
     return (
-      <div onClick={onSelect} style={{
+      <div onClick={handleSelect} style={{
         ...baseStyle, border: `1px solid ${selected ? t.accent : t.border}`,
         overflow: 'hidden', fontFamily: monoFont,
         animation: isNew ? 'enterStrong 1s ease-out' : 'none',
@@ -124,7 +128,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
 
   if (isResult) {
     return (
-      <div onClick={onSelect} style={{
+      <div onClick={handleSelect} style={{
         ...baseStyle, padding: '6px 12px',
         fontFamily: monoFont, fontSize: 12.5, color: t.green,
         display: 'flex', gap: 10, alignItems: 'center',
@@ -139,7 +143,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
 
   if (isBash) {
     return (
-      <div onClick={onSelect} style={{
+      <div onClick={handleSelect} style={{
         ...baseStyle, border: `1px solid ${selected ? t.accent : t.border}`,
         overflow: 'hidden', fontFamily: monoFont,
       }}>
@@ -162,7 +166,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
 
   // user / assistant
   return (
-    <div onClick={onSelect} style={{
+    <div onClick={handleSelect} style={{
       ...baseStyle, display: 'flex', gap: 10, padding: '8px',
       background: selected ? t.panel : 'transparent',
       border: `1px solid ${selected ? t.accent : 'transparent'}`,
@@ -202,6 +206,8 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
   );
 }
 
+export const EntryBlock = memo(EntryBlockImpl);
+
 // ── Inline images ───────────────────────────────────────────────────────────
 
 function imageSrc(img: EntryImage): string {
@@ -240,6 +246,21 @@ function Images({ images, theme }: { images: EntryImage[]; theme: ThemeMode }) {
   );
 }
 
+// Rough pre-mount size for a diff. ~18px per line × (added+removed), capped
+// at the same maxHeight we pass to PierreDiff so the placeholder matches the
+// scroll viewport once the real component mounts.
+function estimateDiffHeight(oldText: string, newText: string, cap: number): number {
+  const lines = countLines(oldText) + countLines(newText);
+  return Math.min(cap, Math.max(40, 18 * lines + 16));
+}
+
+function countLines(s: string): number {
+  if (!s) return 0;
+  let n = 1;
+  for (let i = 0; i < s.length; i++) if (s.charCodeAt(i) === 10) n++;
+  return n;
+}
+
 // ── Tool-specific bodies ────────────────────────────────────────────────────
 
 function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
@@ -249,7 +270,12 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
 
   // Single-edit (Claude Edit) → old/new diff
   if (typeof args.old_string === 'string' && typeof args.new_string === 'string') {
-    return <PierreDiff theme={theme} path={path} oldText={args.old_string} newText={args.new_string} />;
+    const h = estimateDiffHeight(args.old_string, args.new_string, 320);
+    return (
+      <DeferredMount placeholderHeight={h}>
+        <PierreDiff theme={theme} path={path} oldText={args.old_string} newText={args.new_string} />
+      </DeferredMount>
+    );
   }
 
   // Multi-edit → stack of diffs, separated by hairlines
@@ -258,11 +284,14 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
       <div>
         {(args.edits as Array<{ old_string?: string; new_string?: string }>).map((ed, i) => {
           if (typeof ed?.old_string !== 'string' || typeof ed?.new_string !== 'string') return null;
+          const h = estimateDiffHeight(ed.old_string, ed.new_string, 240);
           return (
             <div key={i} style={{
               borderTop: i === 0 ? 'none' : `1px solid ${t.border2}`,
             }}>
-              <PierreDiff theme={theme} path={path} oldText={ed.old_string} newText={ed.new_string} maxHeight={240} />
+              <DeferredMount placeholderHeight={h}>
+                <PierreDiff theme={theme} path={path} oldText={ed.old_string} newText={ed.new_string} maxHeight={240} />
+              </DeferredMount>
             </div>
           );
         })}
@@ -272,7 +301,12 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
 
   // Write → new file content (treat as add-only diff so it gets the green tint)
   if (typeof args.content === 'string') {
-    return <PierreDiff theme={theme} path={path} oldText="" newText={args.content as string} />;
+    const h = estimateDiffHeight('', args.content, 320);
+    return (
+      <DeferredMount placeholderHeight={h}>
+        <PierreDiff theme={theme} path={path} oldText="" newText={args.content as string} />
+      </DeferredMount>
+    );
   }
 
   // Default: cheap preview

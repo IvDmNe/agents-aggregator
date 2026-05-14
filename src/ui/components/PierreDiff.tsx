@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import { MultiFileDiff } from '@pierre/diffs/react';
 import { monoFont, type ThemeMode } from '../theme';
 
@@ -15,32 +16,34 @@ interface PierreDiffProps {
   disableFileHeader?: boolean;
 }
 
-/**
- * Thin wrapper around `@pierre/diffs`' MultiFileDiff. Pierre owns the markup
- * inside a Shadow DOM (custom element), so our theme tokens don't cascade in —
- * we pick its built-in `pierre-light` / `pierre-dark` themes to match mode.
- */
-export function PierreDiff({
+// Pierre's MultiFileDiff memoizes parseDiffFromFile on oldFile/newFile reference
+// equality and re-tokenizes via Shiki when options change — stabilize all three
+// objects so unrelated parent re-renders don't re-tokenize the diff.
+function PierreDiffImpl({
   theme, oldText, newText, path, diffStyle = 'unified',
   maxHeight = 320, disableFileHeader = true,
 }: PierreDiffProps) {
   const name = path && path.length > 0 ? path : 'file';
+  const oldFile = useMemo(() => ({ name, contents: oldText }), [name, oldText]);
+  const newFile = useMemo(() => ({ name, contents: newText }), [name, newText]);
+  const options = useMemo(() => ({
+    themeType: theme,
+    theme: { light: 'pierre-light' as const, dark: 'pierre-dark' as const },
+    diffStyle,
+    disableFileHeader,
+  }), [theme, diffStyle, disableFileHeader]);
+
+  const wrapStyle = useMemo(() => ({
+    overflow: 'auto' as const,
+    maxHeight: maxHeight === 'none' ? undefined : maxHeight,
+    fontFamily: monoFont,
+  }), [maxHeight]);
+
   return (
-    <div style={{
-      overflow: 'auto',
-      maxHeight: maxHeight === 'none' ? undefined : maxHeight,
-      fontFamily: monoFont,
-    }}>
-      <MultiFileDiff
-        oldFile={{ name, contents: oldText }}
-        newFile={{ name, contents: newText }}
-        options={{
-          themeType: theme,
-          theme: { light: 'pierre-light', dark: 'pierre-dark' },
-          diffStyle,
-          disableFileHeader,
-        }}
-      />
+    <div style={wrapStyle}>
+      <MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} />
     </div>
   );
 }
+
+export const PierreDiff = memo(PierreDiffImpl);
