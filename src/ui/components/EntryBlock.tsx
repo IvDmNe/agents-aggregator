@@ -1,10 +1,12 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Entry, Session } from '../../shared/types';
 import { LivePip } from './AgentChip';
+import { DiffView } from './DiffView';
+import { Markdown } from './Markdown';
 import {
   AGENT_GLYPHS, AGENT_HUES,
   monoFont, sansFont, themes,
-  type AgentTreatment, type ThemeMode,
+  type AgentTreatment, type Theme, type ThemeMode,
 } from '../theme';
 
 interface EntryBlockProps {
@@ -51,12 +53,15 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         }}>
           ▾ thinking · {e.timestamp}
         </div>
-        <div style={{ fontSize: 12.5, color: t.dim, lineHeight: 1.55 }}>{e.text}</div>
+        <div style={{ fontSize: 12.5, color: t.dim, lineHeight: 1.55 }}>
+          <Markdown theme={theme} content={e.text ?? ''} compact />
+        </div>
       </div>
     );
   }
 
   if (isTool) {
+    const body = renderToolBody(e, theme, t);
     return (
       <div onClick={onSelect} style={{
         ...baseStyle, border: `1px solid ${selected ? t.accent : t.border}`,
@@ -70,14 +75,13 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         }}>
           <span style={{ color: t.accent }}>▸</span>
           <span style={{ color: t.fg, fontWeight: 500 }}>{e.tool}</span>
-          <span>{e.args?.path}</span>
-          <span style={{ marginLeft: 'auto', color: t.dim2 }}>{e.timestamp}</span>
+          <span style={{
+            flex: 1, minWidth: 0,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{e.args?.path}</span>
+          <span style={{ color: t.dim2 }}>{e.timestamp}</span>
         </div>
-        <pre style={{
-          margin: 0, padding: '10px 12px', fontSize: 11.5, color: t.fg,
-          background: theme === 'dark' ? '#0a0c10' : '#fffdf7',
-          whiteSpace: 'pre-wrap', overflow: 'hidden', maxHeight: 140,
-        }}>{e.preview}</pre>
+        {body}
       </div>
     );
   }
@@ -147,7 +151,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
           )}
         </div>
         <div style={{ color: t.fg, fontSize: 13, lineHeight: 1.55 }}>
-          {e.text}
+          <Markdown theme={theme} content={e.text ?? ''} />
           {e.streaming && (
             <span style={{
               display: 'inline-block', width: 7, height: 14, marginLeft: 2,
@@ -158,5 +162,49 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Tool-specific bodies ────────────────────────────────────────────────────
+
+function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
+  const args = (e.args ?? {}) as Record<string, unknown>;
+
+  // Single-edit (Claude Edit) → old/new diff
+  if (typeof args.old_string === 'string' && typeof args.new_string === 'string') {
+    return <DiffView theme={theme} oldText={args.old_string as string} newText={args.new_string as string} />;
+  }
+
+  // Multi-edit → stack of diffs, separated by hairlines
+  if (Array.isArray(args.edits)) {
+    return (
+      <div>
+        {(args.edits as Array<{ old_string?: string; new_string?: string }>).map((ed, i) => {
+          if (typeof ed?.old_string !== 'string' || typeof ed?.new_string !== 'string') return null;
+          return (
+            <div key={i} style={{
+              borderTop: i === 0 ? 'none' : `1px solid ${t.border2}`,
+            }}>
+              <DiffView theme={theme} oldText={ed.old_string} newText={ed.new_string} maxLines={120} />
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Write → new file content (treat as add-only diff so it gets the green tint)
+  if (typeof args.content === 'string') {
+    return <DiffView theme={theme} oldText="" newText={args.content as string} />;
+  }
+
+  // Default: cheap preview
+  return (
+    <pre style={{
+      margin: 0, padding: '10px 12px', fontSize: 11.5, color: t.fg,
+      background: theme === 'dark' ? '#0a0c10' : '#fffdf7',
+      whiteSpace: 'pre-wrap', overflow: 'hidden', maxHeight: 140,
+      fontFamily: monoFont,
+    }}>{e.preview}</pre>
   );
 }

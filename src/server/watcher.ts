@@ -38,8 +38,11 @@ function watchSource(src: ConfigSource): (() => void) | null {
   }
 
   // Watch the sessions parent dir for each agent so we don't pick up
-  // unrelated files. Pi: <root>/agent/sessions; others added later.
-  const watchDir = src.agent === 'pi' ? path.join(root, 'agent', 'sessions') : root;
+  // unrelated files (and so fs.watch on macOS/Linux doesn't scan huge trees).
+  const watchDir =
+    src.agent === 'pi' ? path.join(root, 'agent', 'sessions') :
+    src.agent === 'claude' ? path.join(root, 'projects') :
+    root;
   if (!fs.existsSync(watchDir)) return null;
 
   const pending = new Map<string, NodeJS.Timeout>();

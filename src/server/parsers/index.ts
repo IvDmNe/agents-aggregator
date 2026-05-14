@@ -1,10 +1,11 @@
 import type { AgentType } from '../../shared/types';
 import type { Parser } from './base';
+import { claudeParser } from './claude';
 import { piParser } from './pi';
 
 const parsers: Record<AgentType, Parser | null> = {
   pi: piParser,
-  claude: null,    // Phase 3
+  claude: claudeParser,
   codex: null,     // Phase 4
   opencode: null,  // Phase 5
 };
