@@ -5,8 +5,7 @@ import {
 import { fetchSessionFile, type SessionFile, type SessionFileError } from '../api';
 import { monoFont, themes, type ThemeMode } from '../theme';
 import { CodeView } from './CodeView';
-import { DiffView } from './DiffView';
-import { SideBySideDiff } from './SideBySideDiff';
+import { PierreDiff } from './PierreDiff';
 
 export type ViewMode = 'unified' | 'split' | 'current';
 const VIEW_MODE_KEY = 'aa.filePreview.viewMode';
@@ -250,23 +249,14 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
                     edit {i + 1} / {totalEdits}
                   </div>
                 )}
-                {mode === 'split' ? (
-                  <SideBySideDiff
-                    theme={theme}
-                    oldText={ed.oldText}
-                    newText={ed.newText}
-                    maxLines={100000}
-                    maxHeight="none"
-                  />
-                ) : (
-                  <DiffView
-                    theme={theme}
-                    oldText={ed.oldText}
-                    newText={ed.newText}
-                    maxLines={100000}
-                    maxHeight="none"
-                  />
-                )}
+                <PierreDiff
+                  theme={theme}
+                  path={preview.path}
+                  oldText={ed.oldText}
+                  newText={ed.newText}
+                  diffStyle={mode === 'split' ? 'split' : 'unified'}
+                  maxHeight="none"
+                />
               </div>
             ))
           )}

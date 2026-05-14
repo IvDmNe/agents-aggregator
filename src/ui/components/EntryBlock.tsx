@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { Entry, EntryImage, Session } from '../../shared/types';
 import { LivePip } from './AgentChip';
-import { DiffView } from './DiffView';
+import { PierreDiff } from './PierreDiff';
 import { previewFromArgs, useFilePreview } from './FilePreview';
 import { Markdown } from './Markdown';
 import { useLightbox, type LightboxImage } from './Lightbox';
@@ -245,9 +245,11 @@ function Images({ images, theme }: { images: EntryImage[]; theme: ThemeMode }) {
 function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
   const args = (e.args ?? {}) as Record<string, unknown>;
 
+  const path = typeof args.path === 'string' ? args.path : undefined;
+
   // Single-edit (Claude Edit) → old/new diff
   if (typeof args.old_string === 'string' && typeof args.new_string === 'string') {
-    return <DiffView theme={theme} oldText={args.old_string as string} newText={args.new_string as string} />;
+    return <PierreDiff theme={theme} path={path} oldText={args.old_string} newText={args.new_string} />;
   }
 
   // Multi-edit → stack of diffs, separated by hairlines
@@ -260,7 +262,7 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
             <div key={i} style={{
               borderTop: i === 0 ? 'none' : `1px solid ${t.border2}`,
             }}>
-              <DiffView theme={theme} oldText={ed.old_string} newText={ed.new_string} maxLines={120} />
+              <PierreDiff theme={theme} path={path} oldText={ed.old_string} newText={ed.new_string} maxHeight={240} />
             </div>
           );
         })}
@@ -270,7 +272,7 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
 
   // Write → new file content (treat as add-only diff so it gets the green tint)
   if (typeof args.content === 'string') {
-    return <DiffView theme={theme} oldText="" newText={args.content as string} />;
+    return <PierreDiff theme={theme} path={path} oldText="" newText={args.content as string} />;
   }
 
   // Default: cheap preview

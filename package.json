@@ -13,11 +13,11 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@pierre/diffs": "^1.1.22",
     "@tanstack/react-router": "^1.169.2",
     "@types/react-syntax-highlighter": "^15.5.13",
     "better-sqlite3": "^11.5.0",
     "commander": "^12.1.0",
-    "diff": "^9.0.0",
     "hono": "^4.6.12",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12",
-    "@types/diff": "^7.0.2",
     "@types/node": "^22.10.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
