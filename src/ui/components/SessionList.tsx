@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { Session, Source } from '../../shared/types';
 import type { BlurredProjects } from '../hooks/useBlurredProjects';
 import { AgentChip, LivePip } from './AgentChip';
+import { PinGlyph } from './PinGlyph';
 import { lastPathSegment, relativeTime } from '../format';
 import { monoFont, themes, type AgentTreatment, type ThemeMode } from '../theme';
 
@@ -15,9 +16,15 @@ interface SessionListProps {
   setActiveId: (id: string) => void;
   loud: boolean;
   blurred: BlurredProjects;
+  isPinned: (id: string) => boolean;
+  onTogglePin: (id: string) => void;
+  onOpenInTab: (id: string) => void;
 }
 
-export function SessionList({ theme, treatment, dense, sessions, sources, activeId, setActiveId, loud, blurred }: SessionListProps) {
+export function SessionList({
+  theme, treatment, dense, sessions, sources, activeId, setActiveId, loud, blurred,
+  isPinned, onTogglePin, onOpenInTab,
+}: SessionListProps) {
   const t = themes[theme];
 
   return (
@@ -25,6 +32,7 @@ export function SessionList({ theme, treatment, dense, sessions, sources, active
       borderRight: `1px solid ${t.border}`, background: t.bg,
       display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0,
     }}>
+      <style>{`.session-row:hover .pin-btn{opacity:1!important}`}</style>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '12px 14px 10px', borderBottom: `1px solid ${t.border}`,
@@ -46,6 +54,9 @@ export function SessionList({ theme, treatment, dense, sessions, sources, active
             session={s} sources={sources} active={s.id === activeId}
             onSelect={setActiveId}
             isBlurred={blurred.has(s.cwd)}
+            pinned={isPinned(s.id)}
+            onTogglePin={onTogglePin}
+            onOpenInTab={onOpenInTab}
           />
         ))}
         {sessions.length === 0 && (
@@ -70,26 +81,36 @@ interface SessionRowProps {
    *  reference — `SessionRow` is memoized. */
   onSelect: (id: string) => void;
   isBlurred: boolean;
+  pinned: boolean;
+  onTogglePin: (id: string) => void;
+  onOpenInTab: (id: string) => void;
 }
 
 const SessionRow = memo(function SessionRow({
   theme, treatment, dense, loud, session: s, sources, active, onSelect, isBlurred,
+  pinned, onTogglePin, onOpenInTab,
 }: SessionRowProps) {
   const t = themes[theme];
   const padY = dense ? 9 : 12;
   const sourceLabel = (sources.find((x) => x.id === s.sourceId) || { label: '' }).label;
   const shortSource = sourceLabel.match(/\((.+?)\)/)?.[1] || sourceLabel;
   const handleClick = () => onSelect(s.id);
+  const handleDoubleClick = () => onOpenInTab(s.id);
+  const handlePin = (ev: React.MouseEvent) => { ev.stopPropagation(); onTogglePin(s.id); };
 
   return (
-    <div onClick={handleClick} style={{
-      padding: `${padY}px 14px`,
-      borderBottom: `1px solid ${t.border2}`,
-      borderLeft: active ? `2px solid ${t.accent}` : '2px solid transparent',
-      paddingLeft: 12,
-      background: active ? (theme === 'dark' ? 'rgba(124,140,255,0.06)' : 'rgba(79,93,214,0.06)') : 'transparent',
-      cursor: 'pointer',
-    }}>
+    <div
+      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
+      className="session-row"
+      style={{
+        padding: `${padY}px 14px`,
+        borderBottom: `1px solid ${t.border2}`,
+        borderLeft: active ? `2px solid ${t.accent}` : '2px solid transparent',
+        paddingLeft: 12,
+        background: active ? (theme === 'dark' ? 'rgba(124,140,255,0.06)' : 'rgba(79,93,214,0.06)') : 'transparent',
+        cursor: 'pointer',
+      }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <AgentChip agent={s.agent} label={treatment === 'chip' ? shortSource : null}
                    theme={theme} treatment={treatment} dense={dense} />
@@ -103,6 +124,26 @@ const SessionRow = memo(function SessionRow({
         <span title={s.updatedAt} style={{ marginLeft: 'auto', color: t.dim2, fontSize: 12, fontFamily: monoFont }}>
           {relativeTime(s.updatedAt)}
         </span>
+        <button
+          onClick={handlePin}
+          title={pinned ? 'Unpin from tabs' : 'Open as tab'}
+          aria-label={pinned ? 'Unpin from tabs' : 'Pin as tab'}
+          className="pin-btn"
+          style={{
+            width: 22, height: 22, padding: 0, marginLeft: -2,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 4, border: 'none',
+            background: 'transparent',
+            color: pinned ? t.accent : t.dim2,
+            opacity: pinned ? 1 : 0,
+            cursor: 'pointer',
+            transition: 'opacity .12s, background .12s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = t.panel2; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+        >
+          <PinGlyph filled={pinned} size={12} />
+        </button>
       </div>
       <div
         className={isBlurred ? 'blur-text' : undefined}

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { composeSessionId } from '../shared/types';
+import { composeSessionId, type Session } from '../shared/types';
 import {
   TWEAK_DEFAULTS,
   monoFont,
@@ -8,7 +8,6 @@ import {
   themes,
   type AgentTreatment,
   type Density,
-  type DetailShape,
   type ThemeMode,
 } from './theme';
 import { useTweaks } from './hooks/useTweaks';
@@ -19,7 +18,7 @@ import { TopBar } from './components/TopBar';
 import { SourcesRail } from './components/SourcesRail';
 import { SessionList } from './components/SessionList';
 import { SessionDetail } from './components/SessionDetail';
-import { InspectorRail } from './components/InspectorRail';
+import { TabBar, type TabSession } from './components/TabBar';
 import { LightboxProvider } from './components/Lightbox';
 import { FilePreviewProvider } from './components/FilePreview';
 import {
@@ -34,7 +33,22 @@ import { indexRoute, sessionRoute } from './router';
 const THEME_OPTS = ['dark', 'light'] as const satisfies readonly ThemeMode[];
 const DENSITY_OPTS = ['compact', 'comfy'] as const satisfies readonly Density[];
 const TREATMENT_OPTS = ['chip', 'letter', 'text'] as const satisfies readonly AgentTreatment[];
-const SHAPE_OPTS = ['chat', 'timeline', 'inspect'] as const satisfies readonly DetailShape[];
+
+const HOME_TAB = 'home';
+const PINNED_KEY = 'aa.pinnedSessionIds';
+const ACTIVE_TAB_KEY = 'aa.activeTab';
+
+function loadPinned(): string[] {
+  try {
+    const raw = localStorage.getItem(PINNED_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw) as unknown;
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+function loadActiveTab(): string {
+  try { return localStorage.getItem(ACTIVE_TAB_KEY) || HOME_TAB; } catch { return HOME_TAB; }
+}
 
 /**
  * Reads `activeId` from the URL path and `source`/`q` from the search params.
@@ -58,10 +72,20 @@ export function AppShell() {
   const bp = useBreakpoint();
   const blurred = useBlurredProjects();
 
+  // ── Tabs state (persisted) ─────────────────────────────────────────────
+  const [pinnedIds, setPinnedIds] = useState<string[]>(loadPinned);
+  const [activeTab, setActiveTab] = useState<string>(loadActiveTab);
+  useEffect(() => {
+    try { localStorage.setItem(PINNED_KEY, JSON.stringify(pinnedIds)); } catch { /* ignore */ }
+  }, [pinnedIds]);
+  useEffect(() => {
+    try { localStorage.setItem(ACTIVE_TAB_KEY, activeTab); } catch { /* ignore */ }
+  }, [activeTab]);
+
   const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
   const [tweaksOpen, setTweaksOpen] = useState<boolean>(false);
   const [refreshKey, setRefreshKey] = useState<number>(0);
-  const [activeRefreshKey, setActiveRefreshKey] = useState<number>(0);
+  const [streamRefreshKey, setStreamRefreshKey] = useState<number>(0);
   const [searchInput, setSearchInput] = useState<string>(searchQ);
 
   // Keep input synced when the URL changes (e.g. back/forward).
@@ -83,12 +107,28 @@ export function AppShell() {
   const { data: sources } = useSources({ project: projectFilter, q: searchQ || undefined }, refreshKey);
   const { data: projects } = useProjects({ sourceId: sourceFilter, q: searchQ || undefined }, refreshKey);
   const { data: sessions } = useSessions({ sourceId: sourceFilter, project: projectFilter, q: searchQ || undefined }, refreshKey);
-  const { data: entries, loading: entriesLoading } = useEntries(activeId, activeRefreshKey);
+
+  // The live-stream subscription follows whichever session is being shown:
+  // active tab's session if in tab view, else Home's selected session.
+  const streamId = activeTab === HOME_TAB ? activeId : activeTab;
+  const { data: entries, loading: entriesLoading } = useEntries(streamId, streamRefreshKey);
+
+  // Cache session metadata for pinned ids so a filtered list doesn't blank out tabs.
+  const pinnedMetaRef = useRef<Map<string, TabSession>>(new Map());
+  useEffect(() => {
+    for (const s of sessions) {
+      if (pinnedIds.includes(s.id)) {
+        pinnedMetaRef.current.set(s.id, { id: s.id, name: s.name, agent: s.agent, live: s.live });
+      }
+    }
+  }, [sessions, pinnedIds]);
 
   // Default-navigate to the first session once the list loads — but never on
-  // narrow screens, where the list itself is the landing view.
+  // narrow screens, where the list itself is the landing view, and never when
+  // we're in a tab view.
   useEffect(() => {
     if (bp === 'sm') return;
+    if (activeTab !== HOME_TAB) return;
     if (!activeId && sessions.length > 0) {
       void navigate({
         to: '/session/$id',
@@ -97,7 +137,7 @@ export function AppShell() {
         replace: true,
       });
     }
-  }, [activeId, sessions, navigate, bp]);
+  }, [activeId, sessions, navigate, bp, activeTab]);
 
   const goToList = useCallback(() => {
     void navigate({ to: '/', search: (prev) => prev, replace: true });
@@ -124,21 +164,87 @@ export function AppShell() {
     });
   }, [navigate]);
 
-  // Live updates: any session change → bump list; if it's the active one, bump entries too.
+  // ── Tab helpers ─────────────────────────────────────────────────────────
+  const isPinned = useCallback((id: string) => pinnedIds.includes(id), [pinnedIds]);
+  const togglePin = useCallback((id: string) => {
+    setPinnedIds((arr) => {
+      if (arr.includes(id)) {
+        setActiveTab((cur) => (cur === id ? HOME_TAB : cur));
+        return arr.filter((x) => x !== id);
+      }
+      return [...arr, id];
+    });
+  }, []);
+  const openInTab = useCallback((id: string) => {
+    setPinnedIds((arr) => (arr.includes(id) ? arr : [...arr, id]));
+    setActiveTab(id);
+  }, []);
+  const goHomeTab = useCallback(() => setActiveTab(HOME_TAB), []);
+
+  // Live updates: any session change → bump list; if it matches the stream, bump entries too.
   const onEvent = useCallback((e: { type: string; sourceId?: string; sessionId?: string }) => {
     if (e.type === 'session_updated') {
       setRefreshKey((k) => k + 1);
       const id = composeSessionId(e.sourceId ?? '', e.sessionId ?? '');
-      if (id === activeId) setActiveRefreshKey((k) => k + 1);
+      if (id === streamId) setStreamRefreshKey((k) => k + 1);
     }
-  }, [activeId]);
+  }, [streamId]);
   useEventStream(onEvent);
 
-  const activeSession = sessions.find((s) => s.id === activeId);
+  // Which session is in focus (right pane on Home, or the tab view)?
+  const homeSession = sessions.find((s) => s.id === activeId);
+  const tabSession = activeTab === HOME_TAB ? undefined : sessions.find((s) => s.id === activeTab);
+  const focusedSession = activeTab === HOME_TAB ? homeSession : tabSession;
   const selectedEntry =
     entries.find((e) => e.id === selectedEntryId) || entries[entries.length - 1];
 
   const liveCount = useMemo(() => sessions.filter((s) => s.live).length, [sessions]);
+
+  // Pinned sessions for the tab bar: use freshest data from `sessions`, fall back to cached metadata.
+  const pinnedSessions: TabSession[] = useMemo(() => {
+    return pinnedIds.map((id) => {
+      const fresh = sessions.find((s) => s.id === id);
+      if (fresh) return { id: fresh.id, name: fresh.name, agent: fresh.agent, live: fresh.live };
+      return pinnedMetaRef.current.get(id) ?? { id, name: null, agent: 'claude' as Session['agent'], live: false };
+    });
+  }, [pinnedIds, sessions]);
+
+  // ── Keyboard shortcuts ─────────────────────────────────────────────────
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const meta = ev.metaKey || ev.ctrlKey;
+      if (!meta) return;
+      const target = ev.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return;
+      }
+      // ⌘1..9 — switch tabs by index (1 = Home)
+      if (!ev.shiftKey && !ev.altKey && /^[1-9]$/.test(ev.key)) {
+        const idx = Number(ev.key) - 1;
+        if (idx === 0) { ev.preventDefault(); setActiveTab(HOME_TAB); return; }
+        const target = pinnedIds[idx - 1];
+        if (target) { ev.preventDefault(); setActiveTab(target); }
+        return;
+      }
+      // ⌘W on a session tab — unpin + back to Home
+      if (!ev.shiftKey && !ev.altKey && (ev.key === 'w' || ev.key === 'W')) {
+        if (activeTab !== HOME_TAB) {
+          ev.preventDefault();
+          togglePin(activeTab);
+        }
+        return;
+      }
+      // ⌘⇧P — toggle pin on focused session
+      if (ev.shiftKey && (ev.key === 'p' || ev.key === 'P')) {
+        const target = focusedSession?.id;
+        if (target) { ev.preventDefault(); togglePin(target); }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pinnedIds, activeTab, togglePin, focusedSession?.id]);
+
+  const inTab = activeTab !== HOME_TAB;
 
   return (
     <LightboxProvider>
@@ -187,51 +293,82 @@ export function AppShell() {
         compact={bp === 'sm'}
       />
 
-      <div style={{
-        flex: 1, display: 'grid',
-        gridTemplateColumns: gridColumns({ bp, shape: tw.detailShape, hasActive: !!activeId }),
-        gridTemplateRows: 'minmax(0, 1fr)',
-        minHeight: 0,
-      }}>
-        {bp === 'lg' && (
-          <SourcesRail
-            theme={tw.theme} treatment={tw.agentTreatment}
-            sources={sources}
-            filter={sourceFilter} setFilter={setSourceFilter}
-            projects={projects}
-            projectFilter={projectFilter} setProjectFilter={setProjectFilter}
-            dense={dense}
-            blurred={blurred}
-          />
-        )}
+      <TabBar
+        theme={tw.theme}
+        pinnedSessions={pinnedSessions}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onUnpin={togglePin}
+        loud={tw.liveLoud}
+      />
 
-        {(bp !== 'sm' || !activeId) && (
-          <SessionList
-            theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
-            sessions={sessions} sources={sources}
-            activeId={activeId ?? ''} setActiveId={setActiveId}
-            loud={tw.liveLoud}
-            blurred={blurred}
-          />
-        )}
-
-        {(bp !== 'sm' || activeId) && (
+      {inTab ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <SessionDetail
             theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
-            loud={tw.liveLoud} shape={tw.detailShape}
-            session={activeSession} sources={sources} entries={entries}
+            loud={tw.liveLoud}
+            session={focusedSession} sources={sources} entries={entries}
             selectedEntryId={selectedEntry?.id}
             setSelectedEntryId={setSelectedEntryId}
             loading={entriesLoading}
-            onBack={bp === 'sm' ? goToList : undefined}
             blurred={blurred}
+            inTab
+            isPinned
+            onTogglePin={() => focusedSession && togglePin(focusedSession.id)}
+            onOpenInTab={() => focusedSession && openInTab(focusedSession.id)}
+            onBackHome={goHomeTab}
           />
-        )}
+        </div>
+      ) : (
+        <div style={{
+          flex: 1, display: 'grid',
+          gridTemplateColumns: gridColumns({ bp, hasActive: !!activeId }),
+          gridTemplateRows: 'minmax(0, 1fr)',
+          minHeight: 0,
+        }}>
+          {bp === 'lg' && (
+            <SourcesRail
+              theme={tw.theme} treatment={tw.agentTreatment}
+              sources={sources}
+              filter={sourceFilter} setFilter={setSourceFilter}
+              projects={projects}
+              projectFilter={projectFilter} setProjectFilter={setProjectFilter}
+              dense={dense}
+              blurred={blurred}
+            />
+          )}
 
-        {bp === 'lg' && tw.detailShape === 'inspect' && (
-          <InspectorRail theme={tw.theme} entry={selectedEntry} session={activeSession} />
-        )}
-      </div>
+          {(bp !== 'sm' || !activeId) && (
+            <SessionList
+              theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
+              sessions={sessions} sources={sources}
+              activeId={activeId ?? ''} setActiveId={setActiveId}
+              loud={tw.liveLoud}
+              blurred={blurred}
+              isPinned={isPinned}
+              onTogglePin={togglePin}
+              onOpenInTab={openInTab}
+            />
+          )}
+
+          {(bp !== 'sm' || activeId) && (
+            <SessionDetail
+              theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
+              loud={tw.liveLoud}
+              session={focusedSession} sources={sources} entries={entries}
+              selectedEntryId={selectedEntry?.id}
+              setSelectedEntryId={setSelectedEntryId}
+              loading={entriesLoading}
+              onBack={bp === 'sm' ? goToList : undefined}
+              blurred={blurred}
+              inTab={false}
+              isPinned={focusedSession ? isPinned(focusedSession.id) : false}
+              onTogglePin={() => focusedSession && togglePin(focusedSession.id)}
+              onOpenInTab={() => focusedSession && openInTab(focusedSession.id)}
+            />
+          )}
+        </div>
+      )}
 
       <TweaksPanel title="Tweaks" open={tweaksOpen} onClose={() => setTweaksOpen(false)}>
         <TweakSection label="Theme" />
@@ -244,10 +381,6 @@ export function AppShell() {
         <TweakSelect label="Style" value={tw.agentTreatment} options={TREATMENT_OPTS}
                      onChange={(v) => setTw('agentTreatment', v)} />
 
-        <TweakSection label="Session detail" />
-        <TweakSelect label="Shape" value={tw.detailShape} options={SHAPE_OPTS}
-                     onChange={(v) => setTw('detailShape', v)} />
-
         <TweakSection label="Live activity" />
         <TweakToggle label="Loud (glow + highlight)" value={tw.liveLoud}
                      onChange={(v) => setTw('liveLoud', v)} />
@@ -258,14 +391,8 @@ export function AppShell() {
   );
 }
 
-function gridColumns(opts: {
-  bp: 'sm' | 'md' | 'lg';
-  shape: DetailShape;
-  hasActive: boolean;
-}): string {
+function gridColumns(opts: { bp: 'sm' | 'md' | 'lg'; hasActive: boolean }): string {
   if (opts.bp === 'sm') return 'minmax(0, 1fr)';
   if (opts.bp === 'md') return '300px minmax(0, 1fr)';
-  return opts.shape === 'inspect'
-    ? '210px 340px minmax(0, 1fr) 340px'
-    : '210px 360px minmax(0, 1fr)';
+  return '210px 360px minmax(0, 1fr)';
 }

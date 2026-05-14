@@ -90,22 +90,17 @@ export const monoFont = '"JetBrains Mono", "Geist Mono", ui-monospace, monospace
 
 export type AgentTreatment = 'chip' | 'letter' | 'text';
 export type Density = 'compact' | 'comfy';
-export type DetailShape = 'chat' | 'timeline' | 'inspect';
 
 export interface Tweaks {
   theme: ThemeMode;
   density: Density;
   agentTreatment: AgentTreatment;
-  detailShape: DetailShape;
   liveLoud: boolean;
-  showRawColumn: boolean;
 }
 
 export const TWEAK_DEFAULTS: Tweaks = {
   theme: 'dark',
   density: 'compact',
   agentTreatment: 'chip',
-  detailShape: 'chat',
   liveLoud: true,
-  showRawColumn: false,
 };
