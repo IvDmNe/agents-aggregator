@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { sessionsRepo, sourcesRepo } from './db';
@@ -6,6 +8,8 @@ import { subscribe } from './pubsub';
 import { resolveTargetForSession, sendInput } from './tmux';
 import { log } from './logger';
 import type { AgentType } from '../shared/types';
+
+const MAX_FILE_BYTES = 1024 * 1024; // 1 MB
 
 export const app = new Hono();
 
@@ -57,6 +61,66 @@ app.get('/api/sessions/:sourceId/:sessionId/entries', async (c) => {
   if (!parser) return c.json({ error: 'no parser' }, 501);
   const entries = await parser.parseEntries(session.filePath);
   return c.json({ entries });
+});
+
+app.get('/api/sessions/:sourceId/:sessionId/file', async (c) => {
+  const sourceId = c.req.param('sourceId');
+  const sessionId = c.req.param('sessionId');
+  const session = sessionsRepo.find(sourceId, sessionId);
+  if (!session) return c.json({ error: 'session not found' }, 404);
+
+  const url = new URL(c.req.url);
+  const requested = url.searchParams.get('path');
+  if (!requested) return c.json({ error: 'path required' }, 400);
+  if (!session.cwd) return c.json({ error: 'session has no cwd' }, 400);
+
+  // Resolve target path: absolute is used as-is; relative is joined with cwd.
+  const target = path.isAbsolute(requested)
+    ? path.resolve(requested)
+    : path.resolve(session.cwd, requested);
+
+  // Confine to cwd. Use realpath to follow symlinks on both sides — if the
+  // target doesn't exist, fall back to the lexical path for the 404 reply.
+  let realTarget: string;
+  let realRoot: string;
+  try {
+    realRoot = await fs.realpath(session.cwd);
+  } catch {
+    return c.json({ error: 'cwd missing' }, 404);
+  }
+  try {
+    realTarget = await fs.realpath(target);
+  } catch {
+    return c.json({ error: 'file not found', path: target }, 404);
+  }
+  const rel = path.relative(realRoot, realTarget);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    return c.json({ error: 'path escapes session cwd' }, 403);
+  }
+
+  let stat;
+  try { stat = await fs.stat(realTarget); }
+  catch { return c.json({ error: 'file not found', path: target }, 404); }
+  if (!stat.isFile()) return c.json({ error: 'not a regular file' }, 400);
+  if (stat.size > MAX_FILE_BYTES) {
+    return c.json({ error: 'file too large', size: stat.size, limit: MAX_FILE_BYTES }, 413);
+  }
+
+  let buf: Buffer;
+  try { buf = await fs.readFile(realTarget); }
+  catch (e) { return c.json({ error: 'read failed', detail: (e as Error).message }, 500); }
+
+  // Reject binary content — quick heuristic: any NUL byte in the first 8 KB.
+  const probe = buf.subarray(0, Math.min(buf.length, 8192));
+  if (probe.includes(0)) return c.json({ error: 'binary file' }, 415);
+
+  return c.json({
+    path: realTarget,
+    relative: rel || path.basename(realTarget),
+    size: stat.size,
+    mtime: stat.mtimeMs,
+    content: buf.toString('utf8'),
+  });
 });
 
 app.post('/api/sessions/:sourceId/:sessionId/input', async (c) => {

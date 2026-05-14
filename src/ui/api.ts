@@ -84,6 +84,42 @@ export function useEntries(sessionId: string | undefined, refreshKey: number): {
   return { data, error, loading };
 }
 
+export interface SessionFile {
+  path: string;
+  relative: string;
+  size: number;
+  mtime: number;
+  content: string;
+}
+
+export interface SessionFileError {
+  status: number;
+  error: string;
+  detail?: string;
+  size?: number;
+  limit?: number;
+}
+
+export async function fetchSessionFile(sessionId: string, filePath: string, signal?: AbortSignal): Promise<SessionFile> {
+  const parts = splitSessionId(sessionId);
+  if (!parts) throw new Error('bad session id');
+  const url = `/api/sessions/${encodeURIComponent(parts.sourceId)}/${encodeURIComponent(parts.sessionId)}/file?path=${encodeURIComponent(filePath)}`;
+  const r = await fetch(url, { signal });
+  if (!r.ok) {
+    let body: { error?: string; detail?: string; size?: number; limit?: number } = {};
+    try { body = await r.json() as typeof body; } catch { /* ignore */ }
+    const err: SessionFileError = {
+      status: r.status,
+      error: body.error || `${r.status} ${r.statusText}`,
+      detail: body.detail,
+      size: body.size,
+      limit: body.limit,
+    };
+    throw err;
+  }
+  return (await r.json()) as SessionFile;
+}
+
 export async function sendSessionInput(sessionId: string, text: string): Promise<void> {
   const parts = splitSessionId(sessionId);
   if (!parts) throw new Error('bad session id');

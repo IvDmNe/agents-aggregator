@@ -65,7 +65,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
 
   if (isTool) {
     const body = renderToolBody(e, theme, t);
-    const preview = previewFromArgs(e.tool, e.args as Record<string, unknown> | undefined);
+    const preview = previewFromArgs(e.tool, e.args as Record<string, unknown> | undefined, session.id);
     const path = e.args?.path;
     const expand = (ev: { stopPropagation: () => void }) => {
       ev.stopPropagation();

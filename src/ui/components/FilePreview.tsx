@@ -2,24 +2,25 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
   type MouseEvent, type ReactNode,
 } from 'react';
+import { fetchSessionFile, type SessionFile, type SessionFileError } from '../api';
 import { monoFont, themes, type ThemeMode } from '../theme';
 import { CodeView } from './CodeView';
 import { DiffView } from './DiffView';
 import { SideBySideDiff } from './SideBySideDiff';
 
-export type DiffMode = 'unified' | 'split';
-const DIFF_MODE_KEY = 'aa.filePreview.diffMode';
+export type ViewMode = 'unified' | 'split' | 'current';
+const VIEW_MODE_KEY = 'aa.filePreview.viewMode';
 
-function loadDiffMode(): DiffMode {
+function loadViewMode(): ViewMode {
   try {
-    const v = localStorage.getItem(DIFF_MODE_KEY);
-    if (v === 'split' || v === 'unified') return v;
+    const v = localStorage.getItem(VIEW_MODE_KEY);
+    if (v === 'split' || v === 'unified' || v === 'current') return v;
   } catch { /* localStorage may be unavailable */ }
   return 'unified';
 }
 
-function saveDiffMode(m: DiffMode): void {
-  try { localStorage.setItem(DIFF_MODE_KEY, m); } catch { /* ignore */ }
+function saveViewMode(m: ViewMode): void {
+  try { localStorage.setItem(VIEW_MODE_KEY, m); } catch { /* ignore */ }
 }
 
 export interface FileEdit {
@@ -31,6 +32,8 @@ export interface FilePreview {
   path: string;
   tool: string;
   edits: FileEdit[];
+  /** Composite session id (`sourceId:sessionId`). Required for "view current file". */
+  sessionId?: string;
 }
 
 interface FilePreviewContextValue {
@@ -52,6 +55,7 @@ export function useFilePreview(): FilePreviewContextValue {
 export function previewFromArgs(
   tool: string | undefined,
   args: Record<string, unknown> | undefined,
+  sessionId?: string,
 ): FilePreview | null {
   if (!args) return null;
   const path = typeof args.path === 'string' ? args.path : '';
@@ -60,7 +64,7 @@ export function previewFromArgs(
   // Single-edit
   if (typeof args.old_string === 'string' && typeof args.new_string === 'string') {
     return {
-      path, tool: tool ?? 'Edit',
+      path, tool: tool ?? 'Edit', sessionId,
       edits: [{ oldText: args.old_string, newText: args.new_string }],
     };
   }
@@ -73,13 +77,13 @@ export function previewFromArgs(
         edits.push({ oldText: ed.old_string, newText: ed.new_string });
       }
     }
-    if (edits.length > 0) return { path, tool: tool ?? 'MultiEdit', edits };
+    if (edits.length > 0) return { path, tool: tool ?? 'MultiEdit', edits, sessionId };
   }
 
   // Write / new-file
   if (typeof args.content === 'string') {
     return {
-      path, tool: tool ?? 'Write',
+      path, tool: tool ?? 'Write', sessionId,
       edits: [{ oldText: '', newText: args.content }],
     };
   }
@@ -132,8 +136,33 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
   const stop = (e: MouseEvent) => e.stopPropagation();
   const totalEdits = preview.edits.length;
   const isNewFile = totalEdits === 1 && preview.edits[0].oldText === '';
-  const [mode, setMode] = useState<DiffMode>(() => loadDiffMode());
-  const changeMode = (m: DiffMode) => { setMode(m); saveDiffMode(m); };
+  const [mode, setMode] = useState<ViewMode>(() => loadViewMode());
+  const changeMode = (m: ViewMode) => { setMode(m); saveViewMode(m); };
+  const canFetchCurrent = !!preview.sessionId;
+
+  // Prefetch the on-disk file as soon as the modal opens, so flipping to
+  // 'current' is instant. Deps are stable for a single modal open; in dev
+  // StrictMode the first invocation's fetch is aborted by the cleanup, but
+  // the second invocation kicks off a fresh one that completes normally.
+  const [file, setFile] = useState<SessionFile | null>(null);
+  const [fileErr, setFileErr] = useState<SessionFileError | null>(null);
+  const [loading, setLoading] = useState(canFetchCurrent);
+  useEffect(() => {
+    if (!canFetchCurrent || !preview.sessionId) return;
+    const ac = new AbortController();
+    setLoading(true);
+    setFile(null);
+    setFileErr(null);
+    fetchSessionFile(preview.sessionId, preview.path, ac.signal)
+      .then((f) => { if (!ac.signal.aborted) { setFile(f); setLoading(false); } })
+      .catch((e: unknown) => {
+        if (ac.signal.aborted) return;
+        if (e && typeof e === 'object' && 'status' in e) setFileErr(e as SessionFileError);
+        else setFileErr({ status: 0, error: (e as Error).message ?? 'fetch failed' });
+        setLoading(false);
+      });
+    return () => ac.abort();
+  }, [canFetchCurrent, preview.sessionId, preview.path]);
 
   return (
     <div
@@ -151,7 +180,8 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
       <div
         onClick={stop}
         style={{
-          width: 'min(96vw, 1200px)', maxHeight: '92vh',
+          width: 'min(96vw, 1200px)',
+          height: '92vh',
           display: 'flex', flexDirection: 'column',
           background: t.bg, color: t.fg,
           border: `1px solid ${t.border}`, borderRadius: 8,
@@ -176,9 +206,11 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
               ? 'new file'
               : totalEdits === 1 ? '1 edit' : `${totalEdits} edits`}
           </span>
-          {!isNewFile && (
-            <ModeToggle theme={theme} mode={mode} onChange={changeMode} />
-          )}
+          <ModeToggle
+            theme={theme} mode={mode} onChange={changeMode}
+            disableSplit={isNewFile}
+            disableCurrent={!canFetchCurrent}
+          />
           <button
             type="button"
             aria-label="Close"
@@ -192,7 +224,12 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
         </div>
 
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', background: t.bg }}>
-          {isNewFile ? (
+          {mode === 'current' ? (
+            <CurrentFileBody
+              theme={theme} path={preview.path}
+              file={file} err={fileErr} loading={loading}
+            />
+          ) : isNewFile ? (
             <CodeView
               theme={theme}
               path={preview.path}
@@ -249,37 +286,117 @@ function Overlay({ theme, preview, onClose }: OverlayProps) {
 
 interface ModeToggleProps {
   theme: ThemeMode;
-  mode: DiffMode;
-  onChange: (m: DiffMode) => void;
+  mode: ViewMode;
+  onChange: (m: ViewMode) => void;
+  disableSplit?: boolean;
+  disableCurrent?: boolean;
 }
 
-function ModeToggle({ theme, mode, onChange }: ModeToggleProps) {
+function ModeToggle({ theme, mode, onChange, disableSplit, disableCurrent }: ModeToggleProps) {
   const t = themes[theme];
-  const opts: DiffMode[] = ['unified', 'split'];
+  const opts: ViewMode[] = ['unified', 'split', 'current'];
   return (
-    <div role="group" aria-label="Diff mode" style={{
+    <div role="group" aria-label="View mode" style={{
       display: 'inline-flex', border: `1px solid ${t.border}`, borderRadius: 6,
       overflow: 'hidden', fontFamily: monoFont, fontSize: 11.5, lineHeight: 1,
     }}>
-      {opts.map((opt) => {
+      {opts.map((opt, i) => {
         const active = mode === opt;
+        const disabled = (opt === 'split' && disableSplit) || (opt === 'current' && disableCurrent);
         return (
           <button
             key={opt}
             type="button"
-            onClick={() => onChange(opt)}
+            disabled={disabled}
+            onClick={() => !disabled && onChange(opt)}
             aria-pressed={active}
+            title={disabled
+              ? (opt === 'split' ? 'No old content to compare' : 'No file path available')
+              : undefined}
             style={{
               background: active ? t.accent : 'transparent',
-              color: active ? '#fff' : t.fg2,
+              color: active ? '#fff' : (disabled ? t.dim2 : t.fg2),
               border: 'none',
               padding: '4px 9px',
-              cursor: active ? 'default' : 'pointer',
-              borderRight: opt === 'unified' ? `1px solid ${t.border}` : 'none',
+              cursor: disabled ? 'not-allowed' : (active ? 'default' : 'pointer'),
+              opacity: disabled ? 0.5 : 1,
+              borderRight: i < opts.length - 1 ? `1px solid ${t.border}` : 'none',
             }}
           >{opt}</button>
         );
       })}
     </div>
   );
+}
+
+interface CurrentFileBodyProps {
+  theme: ThemeMode;
+  path: string;
+  file: SessionFile | null;
+  err: SessionFileError | null;
+  loading: boolean;
+}
+
+function CurrentFileBody({ theme, path, file, err, loading }: CurrentFileBodyProps) {
+  const t = themes[theme];
+
+  if (loading) {
+    return (
+      <div style={{
+        height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: t.dim2, fontFamily: monoFont, fontSize: 12.5,
+      }}>reading {path}…</div>
+    );
+  }
+
+  if (err) {
+    return (
+      <div style={{
+        margin: '14px', padding: '12px 14px',
+        background: t.panel, border: `1px solid ${t.border2}`, borderRadius: 6,
+        color: t.fg2, fontFamily: monoFont, fontSize: 12.5,
+      }}>
+        <div style={{ color: t.amber, marginBottom: 4 }}>{currentErrorTitle(err)}</div>
+        <div style={{ color: t.dim }}>{path}</div>
+        {err.detail && <div style={{ color: t.dim2, marginTop: 4 }}>{err.detail}</div>}
+        {err.size != null && err.limit != null && (
+          <div style={{ color: t.dim2, marginTop: 4 }}>
+            file size {formatBytes(err.size)} · limit {formatBytes(err.limit)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!file) return null;
+
+  return (
+    <div>
+      <div style={{
+        padding: '6px 14px', fontSize: 11.5, color: t.dim2,
+        fontFamily: monoFont, background: t.panel,
+        borderBottom: `1px solid ${t.border2}`,
+        display: 'flex', gap: 12, flexWrap: 'wrap',
+      }}>
+        <span>current on-disk file</span>
+        <span>{formatBytes(file.size)}</span>
+        <span>modified {new Date(file.mtime).toLocaleString()}</span>
+      </div>
+      <CodeView theme={theme} path={file.path} code={file.content} />
+    </div>
+  );
+}
+
+function currentErrorTitle(err: SessionFileError): string {
+  if (err.status === 404) return 'file not found on disk';
+  if (err.status === 403) return 'path escapes session cwd';
+  if (err.status === 413) return 'file too large to display';
+  if (err.status === 415) return 'binary file';
+  return err.error || 'failed to read file';
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
