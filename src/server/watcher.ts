@@ -42,6 +42,7 @@ function watchSource(src: ConfigSource): (() => void) | null {
   const watchDir =
     src.agent === 'pi' ? path.join(root, 'agent', 'sessions') :
     src.agent === 'claude' ? path.join(root, 'projects') :
+    src.agent === 'codex' ? path.join(root, 'sessions') :
     root;
   if (!fs.existsSync(watchDir)) return null;
 
