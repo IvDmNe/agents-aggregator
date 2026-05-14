@@ -10,6 +10,8 @@ async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 export interface SourcesResponse { sources: Source[]; }
 export interface SessionsResponse { sessions: Session[]; }
 export interface EntriesResponse { entries: Entry[]; }
+export interface Project { cwd: string; count: number; latestAt: string; }
+export interface ProjectsResponse { projects: Project[]; }
 
 export function useSources(refreshKey: number): { data: Source[]; error: Error | null } {
   const [data, setData] = useState<Source[]>([]);
@@ -24,20 +26,34 @@ export function useSources(refreshKey: number): { data: Source[]; error: Error |
   return { data, error };
 }
 
-export function useSessions(filter: { sourceId?: string | null; q?: string }, refreshKey: number): { data: Session[]; error: Error | null } {
+export function useSessions(filter: { sourceId?: string | null; q?: string; project?: string | null }, refreshKey: number): { data: Session[]; error: Error | null } {
   const [data, setData] = useState<Session[]>([]);
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
     const ac = new AbortController();
     const params = new URLSearchParams();
     if (filter.sourceId) params.set('source', filter.sourceId);
+    if (filter.project) params.set('project', filter.project);
     if (filter.q) params.set('q', filter.q);
     const qs = params.toString();
     fetchJson<SessionsResponse>(`/api/sessions${qs ? `?${qs}` : ''}`, ac.signal)
       .then((r) => setData(r.sessions))
       .catch((e) => { if (e.name !== 'AbortError') setError(e as Error); });
     return () => ac.abort();
-  }, [filter.sourceId, filter.q, refreshKey]);
+  }, [filter.sourceId, filter.project, filter.q, refreshKey]);
+  return { data, error };
+}
+
+export function useProjects(refreshKey: number): { data: Project[]; error: Error | null } {
+  const [data, setData] = useState<Project[]>([]);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    const ac = new AbortController();
+    fetchJson<ProjectsResponse>('/api/projects', ac.signal)
+      .then((r) => setData(r.projects))
+      .catch((e) => { if (e.name !== 'AbortError') setError(e as Error); });
+    return () => ac.abort();
+  }, [refreshKey]);
   return { data, error };
 }
 

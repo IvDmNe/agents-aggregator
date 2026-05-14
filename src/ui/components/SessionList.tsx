@@ -1,5 +1,6 @@
 import type { Session, Source } from '../../shared/types';
 import { AgentChip, LivePip } from './AgentChip';
+import { lastPathSegment, relativeTime } from '../format';
 import { monoFont, themes, type AgentTreatment, type ThemeMode } from '../theme';
 
 interface SessionListProps {
@@ -25,11 +26,11 @@ export function SessionList({ theme, treatment, dense, sessions, sources, active
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '12px 14px 10px', borderBottom: `1px solid ${t.border}`,
       }}>
-        <span style={{ color: t.dim2, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+        <span style={{ color: t.dim2, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
           Sessions
         </span>
-        <span style={{ color: t.dim2, fontSize: 11, fontFamily: monoFont }}>{sessions.length}</span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, fontSize: 11, color: t.dim, fontFamily: monoFont }}>
+        <span style={{ color: t.dim2, fontSize: 12, fontFamily: monoFont }}>{sessions.length}</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, fontSize: 12, color: t.dim, fontFamily: monoFont }}>
           <span style={{ padding: '2px 7px', background: t.panel2, borderRadius: 3 }}>recent</span>
           <span style={{ padding: '2px 7px', color: t.dim2 }}>cost</span>
           <span style={{ padding: '2px 7px', color: t.dim2 }}>cwd</span>
@@ -44,7 +45,7 @@ export function SessionList({ theme, treatment, dense, sessions, sources, active
           />
         ))}
         {sessions.length === 0 && (
-          <div style={{ padding: 24, color: t.dim, fontSize: 12, textAlign: 'center' }}>
+          <div style={{ padding: 24, color: t.dim, fontSize: 13, textAlign: 'center' }}>
             No matching sessions.
           </div>
         )}
@@ -83,31 +84,31 @@ function SessionRow({ theme, treatment, dense, loud, session: s, sources, active
         <AgentChip agent={s.agent} label={treatment === 'chip' ? shortSource : null}
                    theme={theme} treatment={treatment} dense={dense} />
         {s.live && (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10,
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11,
             color: t.green, fontFamily: monoFont }}>
             <LivePip theme={theme} loud={loud} size={5} />
             {s.status === 'streaming' ? 'streaming' : s.status === 'tool' ? 'tool' : 'live'}
           </span>
         )}
-        <span style={{ marginLeft: 'auto', color: t.dim2, fontSize: 11, fontFamily: monoFont }}>
-          {s.updatedAt}
+        <span title={s.updatedAt} style={{ marginLeft: 'auto', color: t.dim2, fontSize: 12, fontFamily: monoFont }}>
+          {relativeTime(s.updatedAt)}
         </span>
       </div>
       <div style={{
-        color: t.fg, fontSize: dense ? 12.5 : 13, fontWeight: 500,
+        color: t.fg, fontSize: dense ? 13.5 : 14, fontWeight: 500,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         marginBottom: dense ? 2 : 4,
       }}>
         {s.name || <span style={{ color: t.dim2, fontWeight: 400, fontStyle: 'italic' }}>Untitled</span>}
       </div>
       <div style={{
-        display: 'flex', gap: 8, fontSize: 11, color: t.dim, fontFamily: monoFont,
+        display: 'flex', gap: 8, fontSize: 12, color: t.dim, fontFamily: monoFont,
         alignItems: 'center',
       }}>
-        <span style={{
+        <span title={s.cwd} style={{
           flex: 1, minWidth: 0,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{s.cwd}</span>
+        }}>{lastPathSegment(s.cwd)}</span>
         <span>{s.messageCount}</span>
         {s.costUsd != null && <span>${s.costUsd.toFixed(2)}</span>}
         {s.branches > 0 && <span style={{ color: t.amber }}>⌥{s.branches}</span>}

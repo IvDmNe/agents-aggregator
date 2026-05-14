@@ -13,7 +13,7 @@ import {
 } from './theme';
 import { useTweaks } from './hooks/useTweaks';
 import { useBreakpoint } from './hooks/useBreakpoint';
-import { useEntries, useEventStream, useSessions, useSources } from './api';
+import { useEntries, useEventStream, useProjects, useSessions, useSources } from './api';
 import { TopBar } from './components/TopBar';
 import { SourcesRail } from './components/SourcesRail';
 import { SessionList } from './components/SessionList';
@@ -44,8 +44,9 @@ export function AppShell() {
   const sessionMatch = useMatch({ from: sessionRoute.id, shouldThrow: false });
   const indexMatch = useMatch({ from: indexRoute.id, shouldThrow: false });
   const activeId = sessionMatch?.params.id;
-  const search = (sessionMatch?.search ?? indexMatch?.search ?? {}) as { source?: string; q?: string };
+  const search = (sessionMatch?.search ?? indexMatch?.search ?? {}) as { source?: string; q?: string; project?: string };
   const sourceFilter = search.source ?? null;
+  const projectFilter = search.project ?? null;
   const searchQ = search.q ?? '';
 
   const [tw, setTw] = useTweaks(TWEAK_DEFAULTS);
@@ -76,7 +77,8 @@ export function AppShell() {
   }, [searchInput, searchQ, navigate]);
 
   const { data: sources } = useSources(refreshKey);
-  const { data: sessions } = useSessions({ sourceId: sourceFilter, q: searchQ || undefined }, refreshKey);
+  const { data: projects } = useProjects(refreshKey);
+  const { data: sessions } = useSessions({ sourceId: sourceFilter, project: projectFilter, q: searchQ || undefined }, refreshKey);
   const { data: entries, loading: entriesLoading } = useEntries(activeId, activeRefreshKey);
 
   // Default-navigate to the first session once the list loads — but never on
@@ -110,6 +112,14 @@ export function AppShell() {
     });
   }, [navigate]);
 
+  const setProjectFilter = useCallback((cwd: string | null) => {
+    void navigate({
+      to: '.',
+      search: (prev) => ({ ...prev, project: cwd ?? undefined }),
+      replace: true,
+    });
+  }, [navigate]);
+
   // Live updates: any session change → bump list; if it's the active one, bump entries too.
   const onEvent = useCallback((e: { type: string; sourceId?: string; sessionId?: string }) => {
     if (e.type === 'session_updated') {
@@ -129,7 +139,7 @@ export function AppShell() {
   return (
     <div style={{
       width: '100%', height: '100%', background: t.bg, color: t.fg,
-      fontFamily: sansFont, fontSize: 13, display: 'flex', flexDirection: 'column',
+      fontFamily: sansFont, fontSize: 14, display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
     }}>
       <style>{`
@@ -181,6 +191,8 @@ export function AppShell() {
             theme={tw.theme} treatment={tw.agentTreatment}
             sources={sources} sessions={sessions}
             filter={sourceFilter} setFilter={setSourceFilter}
+            projects={projects}
+            projectFilter={projectFilter} setProjectFilter={setProjectFilter}
             dense={dense}
           />
         )}

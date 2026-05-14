@@ -25,7 +25,7 @@ export function AgentChip({ agent, label, theme, treatment, dense }: AgentChipPr
   if (treatment === 'text') {
     return (
       <span style={{
-        color: h.fg, fontFamily: monoFont, fontSize: dense ? 10.5 : 11,
+        color: h.fg, fontFamily: monoFont, fontSize: dense ? 11.5 : 12,
         letterSpacing: '0.02em',
       }}>
         [{agent}]{label ? ` · ${label}` : ''}
@@ -39,9 +39,9 @@ export function AgentChip({ agent, label, theme, treatment, dense }: AgentChipPr
           width: dense ? 16 : 18, height: dense ? 16 : 18, borderRadius: 4,
           background: h.solid, color: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: dense ? 10 : 11, fontWeight: 700, fontFamily: sansFont,
+          fontSize: dense ? 11 : 12, fontWeight: 700, fontFamily: sansFont,
         }}>{AGENT_GLYPHS[agent]}</span>
-        {label && <span style={{ color: t.fg, fontSize: dense ? 11 : 12 }}>{label}</span>}
+        {label && <span style={{ color: t.fg, fontSize: dense ? 12 : 13 }}>{label}</span>}
       </span>
     );
   }
@@ -50,7 +50,7 @@ export function AgentChip({ agent, label, theme, treatment, dense }: AgentChipPr
       display: 'inline-flex', alignItems: 'center', gap: 6,
       padding: dense ? '1px 7px' : '2px 8px', borderRadius: 4,
       background: h.bg, color: h.fg,
-      fontSize: dense ? 10.5 : 11, fontWeight: 500, fontFamily: sansFont,
+      fontSize: dense ? 11.5 : 12, fontWeight: 500, fontFamily: sansFont,
       letterSpacing: '0.01em', whiteSpace: 'nowrap',
     } satisfies CSSProperties}>
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: h.fg }} />

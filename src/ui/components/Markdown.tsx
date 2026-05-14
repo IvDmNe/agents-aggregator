@@ -77,7 +77,7 @@ export function Markdown({ theme, content, compact }: MarkdownProps) {
         margin: '0 0 0.6em', padding: '10px 12px', borderRadius: 6,
         background: theme === 'dark' ? '#0a0c10' : '#fffdf7',
         border: `1px solid ${t.border2}`,
-        fontFamily: monoFont, fontSize: 12,
+        fontFamily: monoFont, fontSize: 13,
         overflow: 'auto', lineHeight: 1.45,
       }}>{children}</pre>
     ),
@@ -99,7 +99,7 @@ export function Markdown({ theme, content, compact }: MarkdownProps) {
 
   return (
     <div style={{
-      color: fg, fontSize: compact ? 12.5 : 13,
+      color: fg, fontSize: compact ? 13.5 : 14,
       // Long URLs, JSON, identifiers must wrap or they push the column wide.
       overflowWrap: 'anywhere', wordBreak: 'break-word',
       minWidth: 0,

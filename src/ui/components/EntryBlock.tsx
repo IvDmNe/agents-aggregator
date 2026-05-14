@@ -47,13 +47,13 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         animation: isNew ? 'enterRow .8s ease-out' : 'none',
       }}>
         <div style={{
-          fontSize: 10, color: t.dim2, letterSpacing: '0.08em',
+          fontSize: 11, color: t.dim2, letterSpacing: '0.08em',
           textTransform: 'uppercase', marginBottom: 6, fontStyle: 'normal',
           fontFamily: monoFont, fontWeight: 600,
         }}>
           ▾ thinking · {e.timestamp}
         </div>
-        <div style={{ fontSize: 12.5, color: t.dim, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 13.5, color: t.dim, lineHeight: 1.55 }}>
           <Markdown theme={theme} content={e.text ?? ''} compact />
         </div>
       </div>
@@ -71,7 +71,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         <div style={{
           display: 'flex', gap: 10, alignItems: 'center',
           padding: '7px 12px', background: t.panel2,
-          fontSize: 11, color: t.dim,
+          fontSize: 12, color: t.dim,
         }}>
           <span style={{ color: t.accent }}>▸</span>
           <span style={{ color: t.fg, fontWeight: 500 }}>{e.tool}</span>
@@ -90,7 +90,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
     return (
       <div onClick={onSelect} style={{
         ...baseStyle, padding: '6px 12px',
-        fontFamily: monoFont, fontSize: 11.5, color: t.green,
+        fontFamily: monoFont, fontSize: 12.5, color: t.green,
         display: 'flex', gap: 10, alignItems: 'center',
         background: selected ? t.panel : 'transparent',
         border: `1px solid ${selected ? t.accent : 'transparent'}`,
@@ -110,13 +110,13 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         <div style={{
           display: 'flex', justifyContent: 'space-between',
           padding: '6px 12px', background: t.panel2,
-          fontSize: 11.5, color: t.amber,
+          fontSize: 12.5, color: t.amber,
         }}>
           <span>$ {e.cmd}</span>
           <span style={{ color: t.dim2 }}>{e.timestamp}</span>
         </div>
         <pre style={{
-          margin: 0, padding: '8px 12px', fontSize: 11.5, color: t.dim,
+          margin: 0, padding: '8px 12px', fontSize: 12.5, color: t.dim,
           background: theme === 'dark' ? '#0a0c10' : '#fffdf7',
           whiteSpace: 'pre-wrap', overflow: 'hidden', maxHeight: 140,
         }}>{e.out}</pre>
@@ -136,10 +136,10 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
         background: isUser ? t.accent : AGENT_HUES[theme][session.agent].solid,
         color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 11, fontWeight: 700, fontFamily: sansFont,
+        fontSize: 12, fontWeight: 700, fontFamily: sansFont,
       }}>{isUser ? 'You' : AGENT_GLYPHS[session.agent]}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: 10, fontSize: 11, color: t.dim2, marginBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 10, fontSize: 12, color: t.dim2, marginBottom: 4 }}>
           <span style={{ color: t.fg, fontWeight: 500 }}>
             {isUser ? 'You' : (session.agent.charAt(0).toUpperCase() + session.agent.slice(1))}
           </span>
@@ -150,7 +150,7 @@ export function EntryBlock({ entry: e, theme, session, compact, isNew, selected,
             </span>
           )}
         </div>
-        <div style={{ color: t.fg, fontSize: 13, lineHeight: 1.55 }}>
+        <div style={{ color: t.fg, fontSize: 14, lineHeight: 1.55 }}>
           <Markdown theme={theme} content={e.text ?? ''} />
           {e.streaming && (
             <span style={{
@@ -201,7 +201,7 @@ function renderToolBody(e: Entry, theme: ThemeMode, t: Theme): ReactNode {
   // Default: cheap preview
   return (
     <pre style={{
-      margin: 0, padding: '10px 12px', fontSize: 11.5, color: t.fg,
+      margin: 0, padding: '10px 12px', fontSize: 12.5, color: t.fg,
       background: theme === 'dark' ? '#0a0c10' : '#fffdf7',
       whiteSpace: 'pre-wrap', overflow: 'hidden', maxHeight: 140,
       fontFamily: monoFont,

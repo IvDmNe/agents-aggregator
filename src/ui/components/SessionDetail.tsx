@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Entry, Session, Source } from '../../shared/types';
 import { sendSessionInput } from '../api';
+import { lastPathSegment, relativeTime } from '../format';
 import { AgentChip, LivePip } from './AgentChip';
 import { EntryBlock } from './EntryBlock';
 import { TimelineView } from './TimelineView';
@@ -50,7 +51,7 @@ export function SessionDetail({
           {onBack && (
             <button onClick={onBack} aria-label="Back to sessions" style={{
               background: 'transparent', border: `1px solid ${t.border}`, borderRadius: 6,
-              color: t.fg2, padding: '4px 10px', fontSize: 14, lineHeight: 1, cursor: 'pointer',
+              color: t.fg2, padding: '4px 10px', fontSize: 15, lineHeight: 1, cursor: 'pointer',
             }}>‹</button>
           )}
           <span style={{ display: 'inline-flex', whiteSpace: 'nowrap' }}>
@@ -59,23 +60,24 @@ export function SessionDetail({
           </span>
           {session.live && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-              color: t.green, fontSize: 11, fontFamily: monoFont }}>
+              color: t.green, fontSize: 12, fontFamily: monoFont }}>
               <LivePip theme={theme} loud={loud} size={6} />
               {session.status}
             </span>
           )}
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, fontFamily: monoFont, fontSize: 11, color: t.dim2 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, fontFamily: monoFont, fontSize: 12, color: t.dim2 }}>
             <span style={{ padding: '3px 8px', background: t.panel, border: `1px solid ${t.border}`, borderRadius: 4 }}>fork</span>
             <span style={{ padding: '3px 8px', background: t.panel, border: `1px solid ${t.border}`, borderRadius: 4 }}>share</span>
             <span style={{ padding: '3px 8px', background: t.panel, border: `1px solid ${t.border}`, borderRadius: 4 }}>⋯</span>
           </div>
         </div>
-        <div style={{ fontSize: 17, fontWeight: 600, color: t.fg, letterSpacing: '-0.005em' }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: t.fg, letterSpacing: '-0.005em' }}>
           {session.name || <span style={{ color: t.dim2, fontStyle: 'italic', fontWeight: 400 }}>Untitled session</span>}
         </div>
-        <div style={{ display: 'flex', gap: 16, fontSize: 11, color: t.dim, marginTop: 6, fontFamily: monoFont }}>
-          <span>{session.cwd}</span>
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: t.dim, marginTop: 6, fontFamily: monoFont, flexWrap: 'wrap' }}>
+          <span title={session.cwd}>{lastPathSegment(session.cwd)}</span>
           <span>{session.model}</span>
+          <span title={session.updatedAt}>{relativeTime(session.updatedAt)}</span>
           <span>${session.costUsd?.toFixed(2) ?? '—'}</span>
           <span>{entries.length} entries</span>
           {session.branches > 0 && <span style={{ color: t.amber }}>{session.branches} branches</span>}
@@ -88,21 +90,21 @@ export function SessionDetail({
       }}>
         {(['chat', 'timeline', 'inspect'] as const).map((mode) => (
           <div key={mode} style={{
-            padding: '8px 12px', fontSize: 11.5, fontFamily: monoFont,
+            padding: '8px 12px', fontSize: 12.5, fontFamily: monoFont,
             color: shape === mode ? t.fg : t.dim,
             borderBottom: shape === mode ? `2px solid ${t.accent}` : '2px solid transparent',
             marginBottom: -1,
           }}>{mode}</div>
         ))}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8,
-          color: t.dim2, fontSize: 10.5, fontFamily: monoFont }}>
+          color: t.dim2, fontSize: 11.5, fontFamily: monoFont }}>
           <span>autoscroll ▸</span>
         </div>
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: shape === 'timeline' ? '0' : `6px ${pad}px 20px` }}>
         {loading && entries.length === 0 && (
-          <div style={{ padding: 24, color: t.dim, fontSize: 12, fontFamily: monoFont }}>loading entries…</div>
+          <div style={{ padding: 24, color: t.dim, fontSize: 13, fontFamily: monoFont }}>loading entries…</div>
         )}
         {shape === 'timeline' ? (
           <TimelineView theme={theme} entries={entries}
@@ -145,7 +147,7 @@ function SendBox({ theme, session, pad }: SendBoxProps) {
   return (
     <div style={{ borderTop: `1px solid ${t.border}`, padding: `10px ${pad}px 14px`, background: t.bg }}>
       {err && (
-        <div style={{ color: t.amber ?? '#c47', fontFamily: monoFont, fontSize: 11, marginBottom: 6 }}>
+        <div style={{ color: t.amber ?? '#c47', fontFamily: monoFont, fontSize: 12, marginBottom: 6 }}>
           {err}
         </div>
       )}
@@ -166,7 +168,7 @@ function SendBox({ theme, session, pad }: SendBoxProps) {
             flex: 1, resize: 'vertical', minHeight: 36, maxHeight: 200,
             background: t.panel, color: t.fg, border: `1px solid ${t.border}`,
             borderRadius: 6, padding: '8px 10px',
-            fontFamily: monoFont, fontSize: 12, lineHeight: 1.45,
+            fontFamily: monoFont, fontSize: 13, lineHeight: 1.45,
             outline: 'none',
           }}
         />
@@ -176,7 +178,7 @@ function SendBox({ theme, session, pad }: SendBoxProps) {
           style={{
             background: t.accent, color: '#fff', border: 'none',
             borderRadius: 6, padding: '8px 14px',
-            fontFamily: monoFont, fontSize: 12, fontWeight: 600,
+            fontFamily: monoFont, fontSize: 13, fontWeight: 600,
             cursor: busy || !text.trim() ? 'default' : 'pointer',
             opacity: busy || !text.trim() ? 0.5 : 1,
           }}

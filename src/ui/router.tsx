@@ -9,6 +9,7 @@ import { AppShell } from './AppShell';
 
 const searchSchema = z.object({
   source: z.string().optional(),
+  project: z.string().optional(),
   q: z.string().optional(),
 });
 

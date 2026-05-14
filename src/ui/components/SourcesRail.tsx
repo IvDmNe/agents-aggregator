@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import type { Session, Source } from '../../shared/types';
+import type { Project } from '../api';
+import { lastPathSegment } from '../format';
 import { AgentChip } from './AgentChip';
 import { monoFont, sansFont, themes, type AgentTreatment, type ThemeMode } from '../theme';
 
@@ -10,10 +12,16 @@ interface SourcesRailProps {
   sessions: Session[];
   filter: string | null;
   setFilter: (id: string | null) => void;
+  projects: Project[];
+  projectFilter: string | null;
+  setProjectFilter: (cwd: string | null) => void;
   dense: boolean;
 }
 
-export function SourcesRail({ theme, treatment, sources, sessions, filter, setFilter, dense }: SourcesRailProps) {
+export function SourcesRail({
+  theme, treatment, sources, sessions, filter, setFilter,
+  projects, projectFilter, setProjectFilter, dense,
+}: SourcesRailProps) {
   const t = themes[theme];
   const counts = useMemo(() => {
     const m: Record<string, number> = {};
@@ -26,16 +34,15 @@ export function SourcesRail({ theme, treatment, sources, sessions, filter, setFi
       borderRight: `1px solid ${t.border}`, background: t.panel,
       display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0,
     }}>
-      <div style={{ padding: '14px 14px 8px', display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        <span style={{ color: t.dim2, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
-          Sources
-        </span>
-        <span style={{ marginLeft: 'auto', color: t.dim2, fontSize: 11, fontFamily: monoFont }}>
-          {sources.filter((s) => s.enabled).length}/{sources.length}
-        </span>
-      </div>
-
       <div style={{ flex: 1, overflow: 'auto', padding: '0 6px 8px' }}>
+        <div style={{ padding: '14px 8px 6px', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ color: t.dim2, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Sources
+          </span>
+          <span style={{ marginLeft: 'auto', color: t.dim2, fontSize: 12, fontFamily: monoFont }}>
+            {sources.filter((s) => s.enabled).length}/{sources.length}
+          </span>
+        </div>
         <SourceRow
           theme={theme} treatment={treatment} dense={dense}
           label="All sources" agent={null} count={sessions.length}
@@ -50,6 +57,31 @@ export function SourcesRail({ theme, treatment, sources, sessions, filter, setFi
             onClick={() => setFilter(filter === src.id ? null : src.id)}
           />
         ))}
+
+        <div style={{ padding: '14px 8px 6px', display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <span style={{ color: t.dim2, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Projects
+          </span>
+          <span style={{ marginLeft: 'auto', color: t.dim2, fontSize: 12, fontFamily: monoFont }}>
+            {projects.length}
+          </span>
+        </div>
+        {projectFilter && (
+          <ProjectRow
+            theme={theme} dense={dense}
+            cwd="" label="All projects" count={sessions.length}
+            active={false} onClick={() => setProjectFilter(null)}
+          />
+        )}
+        {projects.map((p) => (
+          <ProjectRow key={p.cwd}
+            theme={theme} dense={dense}
+            cwd={p.cwd} label={lastPathSegment(p.cwd) || p.cwd}
+            count={p.count}
+            active={projectFilter === p.cwd}
+            onClick={() => setProjectFilter(projectFilter === p.cwd ? null : p.cwd)}
+          />
+        ))}
       </div>
 
       <div style={{ padding: '8px 12px 14px', borderTop: `1px solid ${t.border}` }}>
@@ -57,15 +89,51 @@ export function SourcesRail({ theme, treatment, sources, sessions, filter, setFi
           width: '100%',
           padding: '7px 10px', borderRadius: 6,
           background: 'transparent', border: `1px dashed ${t.border}`,
-          color: t.dim, fontSize: 11.5, fontFamily: sansFont, cursor: 'default',
+          color: t.dim, fontSize: 12.5, fontFamily: sansFont, cursor: 'default',
           textAlign: 'left',
         }}>
           + Add source…
         </button>
-        <div style={{ color: t.dim2, fontSize: 10, fontFamily: monoFont, marginTop: 8, padding: '0 2px' }}>
+        <div style={{ color: t.dim2, fontSize: 11, fontFamily: monoFont, marginTop: 8, padding: '0 2px' }}>
           $12.34 today · 306 total
         </div>
       </div>
+    </div>
+  );
+}
+
+interface ProjectRowProps {
+  theme: ThemeMode;
+  dense: boolean;
+  cwd: string;
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}
+
+function ProjectRow({ theme, dense, cwd, label, count, active, onClick }: ProjectRowProps) {
+  const t = themes[theme];
+  const isClear = label === 'All projects';
+  return (
+    <div onClick={onClick} title={cwd || undefined} style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: dense ? '6px 8px' : '8px 10px',
+      margin: '1px 0', borderRadius: 5,
+      background: active ? t.panel2 : 'transparent',
+      borderLeft: active ? `2px solid ${t.accent}` : '2px solid transparent',
+      paddingLeft: dense ? 8 : 10,
+      cursor: 'pointer',
+    }}>
+      <span style={{
+        width: 18, color: isClear ? t.dim : t.dim, fontSize: 12, textAlign: 'center',
+      }}>{isClear ? '✕' : '▸'}</span>
+      <span style={{
+        color: t.fg, fontSize: dense ? 13 : 13.5,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        flex: 1, minWidth: 0, fontFamily: isClear ? sansFont : monoFont,
+      }}>{label}</span>
+      <span style={{ color: t.dim2, fontSize: 12, fontFamily: monoFont }}>{count}</span>
     </div>
   );
 }
@@ -99,12 +167,12 @@ function SourceRow({ theme, treatment, label, agent, count, enabled = true, acti
     }}>
       {agent
         ? <AgentChip agent={agent} theme={theme} treatment={treatment} dense={dense} />
-        : <span style={{ width: 18, color: t.dim, fontSize: 11, textAlign: 'center' }}>⛶</span>}
+        : <span style={{ width: 18, color: t.dim, fontSize: 12, textAlign: 'center' }}>⛶</span>}
       <span style={{
-        color: t.fg, fontSize: dense ? 12 : 12.5,
+        color: t.fg, fontSize: dense ? 13 : 13.5,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
       }}>{displayLabel}</span>
-      <span style={{ color: t.dim2, fontSize: 11, fontFamily: monoFont }}>{count}</span>
+      <span style={{ color: t.dim2, fontSize: 12, fontFamily: monoFont }}>{count}</span>
     </div>
   );
 }

@@ -19,12 +19,12 @@ export function InspectorRail({ theme, entry, session }: InspectorRailProps) {
       display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0,
     }}>
       <div style={{ padding: '14px 16px', borderBottom: `1px solid ${t.border}` }}>
-        <div style={{ color: t.dim2, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>
+        <div style={{ color: t.dim2, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>
           Inspector
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: t.fg, fontFamily: monoFont, fontSize: 11 }}>{entry.id}</span>
-          <span style={{ marginLeft: 'auto', color: t.dim, fontFamily: monoFont, fontSize: 11 }}>
+          <span style={{ color: t.fg, fontFamily: monoFont, fontSize: 12 }}>{entry.id}</span>
+          <span style={{ marginLeft: 'auto', color: t.dim, fontFamily: monoFont, fontSize: 12 }}>
             {entry.role}
           </span>
         </div>
@@ -32,7 +32,7 @@ export function InspectorRail({ theme, entry, session }: InspectorRailProps) {
 
       <div style={{
         display: 'flex', borderBottom: `1px solid ${t.border}`,
-        fontFamily: monoFont, fontSize: 11, color: t.dim2,
+        fontFamily: monoFont, fontSize: 12, color: t.dim2,
       }}>
         {(['raw', 'meta', 'usage'] as const).map((tab, i) => (
           <div key={tab} style={{
@@ -47,14 +47,14 @@ export function InspectorRail({ theme, entry, session }: InspectorRailProps) {
       <div style={{ flex: 1, overflow: 'auto' }}>
         <pre style={{
           margin: 0, padding: '12px 16px',
-          fontFamily: monoFont, fontSize: 11, color: t.fg2, lineHeight: 1.5,
+          fontFamily: monoFont, fontSize: 12, color: t.fg2, lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word',
         }}>{syntaxColor(raw, t)}</pre>
       </div>
 
       <div style={{
         padding: '10px 16px', borderTop: `1px solid ${t.border}`,
-        display: 'flex', gap: 8, fontFamily: monoFont, fontSize: 11, color: t.dim,
+        display: 'flex', gap: 8, fontFamily: monoFont, fontSize: 12, color: t.dim,
       }}>
         <span style={{ padding: '3px 8px', background: t.panel2, borderRadius: 4 }}>copy</span>
         <span style={{ padding: '3px 8px', background: t.panel2, borderRadius: 4 }}>open file</span>

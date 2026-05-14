@@ -36,7 +36,7 @@ export function DiffView({ theme, oldText, newText, maxLines = 200 }: DiffViewPr
 
   return (
     <pre style={{
-      margin: 0, padding: '8px 0', fontFamily: monoFont, fontSize: 11.5,
+      margin: 0, padding: '8px 0', fontFamily: monoFont, fontSize: 12.5,
       background: isDark ? '#0a0c10' : '#fffdf7',
       overflow: 'auto', maxHeight: 320, lineHeight: 1.45,
     }}>

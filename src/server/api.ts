@@ -18,10 +18,15 @@ app.get('/api/sessions', (c) => {
   const sourceId = url.searchParams.get('source');
   const agent = url.searchParams.get('agent');
   const q = url.searchParams.get('q');
-  const rows = sessionsRepo.list({ sourceId, agent, q });
+  const project = url.searchParams.get('project');
+  const rows = sessionsRepo.list({ sourceId, agent, q, project });
   // Strip filePath from the wire — keep it for entry endpoints only.
   const sessions = rows.map(({ filePath: _fp, ...rest }) => rest);
   return c.json({ sessions });
+});
+
+app.get('/api/projects', (c) => {
+  return c.json({ projects: sessionsRepo.projects() });
 });
 
 app.get('/api/sessions/:sourceId/:sessionId', (c) => {

@@ -37,7 +37,7 @@ export function TimelineView({ theme, entries, selectedEntryId, setSelectedEntry
   };
 
   return (
-    <div style={{ fontFamily: monoFont, fontSize: 12, padding: '4px 0' }}>
+    <div style={{ fontFamily: monoFont, fontSize: 13, padding: '4px 0' }}>
       {entries.map((e, i) => {
         const selected = e.id === selectedEntryId;
         return (
@@ -50,22 +50,22 @@ export function TimelineView({ theme, entries, selectedEntryId, setSelectedEntry
             cursor: 'pointer',
             animation: i === entries.length - 1 ? 'enterRow .8s ease-out' : 'none',
           }}>
-            <span style={{ color: t.dim2, fontSize: 11 }}>{e.timestamp}</span>
-            <span style={{ color: roleColor(e.role), fontSize: 11 }}>
+            <span style={{ color: t.dim2, fontSize: 12 }}>{e.timestamp}</span>
+            <span style={{ color: roleColor(e.role), fontSize: 12 }}>
               {ROLE_GLYPH[e.role] || '•'}
             </span>
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                <span style={{ color: roleColor(e.role), fontWeight: 600, fontSize: 11 }}>{e.role}</span>
+                <span style={{ color: roleColor(e.role), fontWeight: 600, fontSize: 12 }}>{e.role}</span>
                 {e.tool && <span style={{ color: t.dim2 }}>{e.tool} {e.args?.path || ''}</span>}
                 {e.streaming && (
-                  <span style={{ color: t.green, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10 }}>
+                  <span style={{ color: t.green, display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
                     <LivePip theme={theme} loud={loud} size={5} /> streaming
                   </span>
                 )}
               </div>
               <div style={{
-                color: t.fg2, fontSize: 12, marginTop: 3,
+                color: t.fg2, fontSize: 13, marginTop: 3,
                 whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 fontFamily:
                   e.role === 'thinking' || e.role === 'user' || e.role === 'assistant'

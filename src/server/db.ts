@@ -152,11 +152,12 @@ export const sessionsRepo = {
   deleteForSource(sourceId: string): void {
     getDb().prepare(`DELETE FROM session WHERE sourceId = ?`).run(sourceId);
   },
-  list(opts: { sourceId?: string | null; agent?: string | null; q?: string | null } = {}): (Session & { filePath: string })[] {
+  list(opts: { sourceId?: string | null; agent?: string | null; q?: string | null; project?: string | null } = {}): (Session & { filePath: string })[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};
     if (opts.sourceId) { where.push('sourceId = @sourceId'); params.sourceId = opts.sourceId; }
     if (opts.agent) { where.push('agent = @agent'); params.agent = opts.agent; }
+    if (opts.project) { where.push('cwd = @project'); params.project = opts.project; }
     if (opts.q) {
       where.push('(COALESCE(name,"") LIKE @q OR COALESCE(cwd,"") LIKE @q OR COALESCE(model,"") LIKE @q)');
       params.q = `%${opts.q}%`;
@@ -164,6 +165,17 @@ export const sessionsRepo = {
     const sql = `SELECT * FROM session ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
                  ORDER BY updatedAt DESC`;
     return getDb().prepare<typeof params, SessionRow>(sql).all(params).map(rowToSession);
+  },
+  projects(): { cwd: string; count: number; latestAt: string }[] {
+    return getDb()
+      .prepare<unknown[], { cwd: string; count: number; latestAt: string }>(
+        `SELECT cwd, COUNT(*) AS count, MAX(updatedAt) AS latestAt
+         FROM session
+         WHERE cwd IS NOT NULL AND cwd <> ''
+         GROUP BY cwd
+         ORDER BY latestAt DESC`,
+      )
+      .all();
   },
   find(sourceId: string, sessionId: string): (Session & { filePath: string }) | null {
     const r = getDb()

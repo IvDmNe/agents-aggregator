@@ -15,7 +15,7 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
   const t = themes[theme];
   const btnStyle = {
     background: 'transparent', border: `1px solid ${t.border}`, borderRadius: 6,
-    color: t.fg2, fontSize: 11, padding: '5px 9px', cursor: 'pointer',
+    color: t.fg2, fontSize: 12, padding: '5px 9px', cursor: 'pointer',
     fontFamily: monoFont,
   } as const;
 
@@ -38,7 +38,7 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
           }} />
         </div>
         {!compact && (
-          <span style={{ fontWeight: 600, fontSize: 13, color: t.fg, letterSpacing: '-0.005em' }}>
+          <span style={{ fontWeight: 600, fontSize: 14, color: t.fg, letterSpacing: '-0.005em' }}>
             Agents Aggregator
           </span>
         )}
@@ -51,7 +51,7 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '6px 10px', background: t.panel,
         border: `1px solid ${t.border}`, borderRadius: 6,
-        color: t.dim, fontSize: 12,
+        color: t.dim, fontSize: 13,
       }}>
         <span style={{ opacity: 0.7 }}>⌕</span>
         <input
@@ -60,12 +60,12 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
           placeholder={compact ? 'Search…' : 'Search sessions, cwd, models…'}
           style={{
             flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none',
-            color: t.fg, fontFamily: 'inherit', fontSize: 12,
+            color: t.fg, fontFamily: 'inherit', fontSize: 13,
           }}
         />
         {!compact && (
           <span style={{
-            fontFamily: monoFont, fontSize: 10,
+            fontFamily: monoFont, fontSize: 11,
             padding: '1px 5px', background: t.panel2, borderRadius: 3,
             color: t.dim2,
           }}>⌘K</span>
@@ -79,7 +79,7 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
         {!compact && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
-            fontFamily: monoFont, fontSize: 11, color: t.dim,
+            fontFamily: monoFont, fontSize: 12, color: t.dim,
           }}>
             <LivePip theme={theme} loud={true} size={6} />
             <span style={{ color: t.fg }}>{liveCount}</span> live
@@ -88,7 +88,7 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
         {compact && liveCount > 0 && (
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontFamily: monoFont, fontSize: 11, color: t.fg,
+            fontFamily: monoFont, fontSize: 12, color: t.fg,
           }} title={`${liveCount} live`}>
             <LivePip theme={theme} loud={true} size={6} />
             {liveCount}
