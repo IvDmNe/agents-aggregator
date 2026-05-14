@@ -21,10 +21,11 @@ interface SessionDetailProps {
   selectedEntryId: string | undefined;
   setSelectedEntryId: (id: string) => void;
   loading?: boolean;
+  onBack?: () => void;
 }
 
 export function SessionDetail({
-  theme, treatment, dense, loud, shape, session, sources, entries, selectedEntryId, setSelectedEntryId, loading,
+  theme, treatment, dense, loud, shape, session, sources, entries, selectedEntryId, setSelectedEntryId, loading, onBack,
 }: SessionDetailProps) {
   const t = themes[theme];
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -41,10 +42,17 @@ export function SessionDetail({
 
   const sourceLabel = (sources.find((x) => x.id === session.sourceId) || { label: '' }).label;
 
+  const pad = onBack ? 12 : 22;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, background: t.bg }}>
-      <div style={{ padding: '14px 22px', borderBottom: `1px solid ${t.border}` }}>
+      <div style={{ padding: `14px ${pad}px`, borderBottom: `1px solid ${t.border}` }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+          {onBack && (
+            <button onClick={onBack} aria-label="Back to sessions" style={{
+              background: 'transparent', border: `1px solid ${t.border}`, borderRadius: 6,
+              color: t.fg2, padding: '4px 10px', fontSize: 14, lineHeight: 1, cursor: 'pointer',
+            }}>‹</button>
+          )}
           <span style={{ display: 'inline-flex', whiteSpace: 'nowrap' }}>
             <AgentChip agent={session.agent} label={sourceLabel}
                        theme={theme} treatment={treatment} dense={false} />
@@ -75,7 +83,7 @@ export function SessionDetail({
       </div>
 
       <div style={{
-        display: 'flex', gap: 4, padding: '0 22px',
+        display: 'flex', gap: 4, padding: `0 ${pad}px`,
         borderBottom: `1px solid ${t.border}`,
       }}>
         {(['chat', 'timeline', 'inspect'] as const).map((mode) => (
@@ -92,7 +100,7 @@ export function SessionDetail({
         </div>
       </div>
 
-      <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: shape === 'timeline' ? '0' : '6px 22px 20px' }}>
+      <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: shape === 'timeline' ? '0' : `6px ${pad}px 20px` }}>
         {loading && entries.length === 0 && (
           <div style={{ padding: 24, color: t.dim, fontSize: 12, fontFamily: monoFont }}>loading entries…</div>
         )}
@@ -108,13 +116,13 @@ export function SessionDetail({
         )}
       </div>
 
-      {session.live && <SendBox theme={theme} session={session} />}
+      {session.live && <SendBox theme={theme} session={session} pad={pad} />}
     </div>
   );
 }
 
-interface SendBoxProps { theme: ThemeMode; session: Session; }
-function SendBox({ theme, session }: SendBoxProps) {
+interface SendBoxProps { theme: ThemeMode; session: Session; pad: number; }
+function SendBox({ theme, session, pad }: SendBoxProps) {
   const t = themes[theme];
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -135,7 +143,7 @@ function SendBox({ theme, session }: SendBoxProps) {
   };
 
   return (
-    <div style={{ borderTop: `1px solid ${t.border}`, padding: '10px 22px 14px', background: t.bg }}>
+    <div style={{ borderTop: `1px solid ${t.border}`, padding: `10px ${pad}px 14px`, background: t.bg }}>
       {err && (
         <div style={{ color: t.amber ?? '#c47', fontFamily: monoFont, fontSize: 11, marginBottom: 6 }}>
           {err}

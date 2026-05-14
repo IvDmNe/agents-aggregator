@@ -12,6 +12,7 @@ import {
   type ThemeMode,
 } from './theme';
 import { useTweaks } from './hooks/useTweaks';
+import { useBreakpoint } from './hooks/useBreakpoint';
 import { useEntries, useEventStream, useSessions, useSources } from './api';
 import { TopBar } from './components/TopBar';
 import { SourcesRail } from './components/SourcesRail';
@@ -50,6 +51,7 @@ export function AppShell() {
   const [tw, setTw] = useTweaks(TWEAK_DEFAULTS);
   const t = themes[tw.theme];
   const dense = tw.density === 'compact';
+  const bp = useBreakpoint();
 
   const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
   const [tweaksOpen, setTweaksOpen] = useState<boolean>(false);
@@ -77,8 +79,10 @@ export function AppShell() {
   const { data: sessions } = useSessions({ sourceId: sourceFilter, q: searchQ || undefined }, refreshKey);
   const { data: entries, loading: entriesLoading } = useEntries(activeId, activeRefreshKey);
 
-  // Default-navigate to the first session once the list loads.
+  // Default-navigate to the first session once the list loads — but never on
+  // narrow screens, where the list itself is the landing view.
   useEffect(() => {
+    if (bp === 'sm') return;
     if (!activeId && sessions.length > 0) {
       void navigate({
         to: '/session/$id',
@@ -87,7 +91,11 @@ export function AppShell() {
         replace: true,
       });
     }
-  }, [activeId, sessions, navigate]);
+  }, [activeId, sessions, navigate, bp]);
+
+  const goToList = useCallback(() => {
+    void navigate({ to: '/', search: (prev) => prev, replace: true });
+  }, [navigate]);
 
   const setActiveId = useCallback((id: string) => {
     setSelectedEntryId(undefined);
@@ -159,37 +167,46 @@ export function AppShell() {
         setSearch={setSearchInput}
         onToggleTheme={() => setTw('theme', tw.theme === 'dark' ? 'light' : 'dark')}
         onToggleTweaks={() => setTweaksOpen((v) => !v)}
+        compact={bp === 'sm'}
       />
 
       <div style={{
         flex: 1, display: 'grid',
-        gridTemplateColumns: tw.detailShape === 'inspect'
-          ? '210px 340px 1fr 340px'
-          : '210px 360px 1fr',
+        gridTemplateColumns: gridColumns({ bp, shape: tw.detailShape, hasActive: !!activeId }),
         gridTemplateRows: 'minmax(0, 1fr)',
         minHeight: 0,
       }}>
-        <SourcesRail
-          theme={tw.theme} treatment={tw.agentTreatment}
-          sources={sources} sessions={sessions}
-          filter={sourceFilter} setFilter={setSourceFilter}
-          dense={dense}
-        />
-        <SessionList
-          theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
-          sessions={sessions} sources={sources}
-          activeId={activeId ?? ''} setActiveId={setActiveId}
-          loud={tw.liveLoud}
-        />
-        <SessionDetail
-          theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
-          loud={tw.liveLoud} shape={tw.detailShape}
-          session={activeSession} sources={sources} entries={entries}
-          selectedEntryId={selectedEntry?.id}
-          setSelectedEntryId={setSelectedEntryId}
-          loading={entriesLoading}
-        />
-        {tw.detailShape === 'inspect' && (
+        {bp === 'lg' && (
+          <SourcesRail
+            theme={tw.theme} treatment={tw.agentTreatment}
+            sources={sources} sessions={sessions}
+            filter={sourceFilter} setFilter={setSourceFilter}
+            dense={dense}
+          />
+        )}
+
+        {(bp !== 'sm' || !activeId) && (
+          <SessionList
+            theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
+            sessions={sessions} sources={sources}
+            activeId={activeId ?? ''} setActiveId={setActiveId}
+            loud={tw.liveLoud}
+          />
+        )}
+
+        {(bp !== 'sm' || activeId) && (
+          <SessionDetail
+            theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
+            loud={tw.liveLoud} shape={tw.detailShape}
+            session={activeSession} sources={sources} entries={entries}
+            selectedEntryId={selectedEntry?.id}
+            setSelectedEntryId={setSelectedEntryId}
+            loading={entriesLoading}
+            onBack={bp === 'sm' ? goToList : undefined}
+          />
+        )}
+
+        {bp === 'lg' && tw.detailShape === 'inspect' && (
           <InspectorRail theme={tw.theme} entry={selectedEntry} session={activeSession} />
         )}
       </div>
@@ -215,4 +232,16 @@ export function AppShell() {
       </TweaksPanel>
     </div>
   );
+}
+
+function gridColumns(opts: {
+  bp: 'sm' | 'md' | 'lg';
+  shape: DetailShape;
+  hasActive: boolean;
+}): string {
+  if (opts.bp === 'sm') return 'minmax(0, 1fr)';
+  if (opts.bp === 'md') return '300px minmax(0, 1fr)';
+  return opts.shape === 'inspect'
+    ? '210px 340px minmax(0, 1fr) 340px'
+    : '210px 360px minmax(0, 1fr)';
 }
