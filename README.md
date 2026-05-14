@@ -17,6 +17,8 @@ Runs entirely on your machine. No cloud, no auth, single process.
 > are not stable APIs of the upstream agents, so breakage between agent
 > releases is possible — please open an issue if you see one.
 
+![Agents Aggregator screenshot](./screenshot.png)
+
 ## Supported agents
 
 | Agent       | Folder layout                                                 |
