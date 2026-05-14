@@ -60,6 +60,24 @@ export function useEntries(sessionId: string | undefined, refreshKey: number): {
   return { data, error, loading };
 }
 
+export async function sendSessionInput(sessionId: string, text: string): Promise<void> {
+  const parts = splitSessionId(sessionId);
+  if (!parts) throw new Error('bad session id');
+  const r = await fetch(
+    `/api/sessions/${encodeURIComponent(parts.sourceId)}/${encodeURIComponent(parts.sessionId)}/input`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text }),
+    },
+  );
+  if (!r.ok) {
+    let detail = '';
+    try { const j = await r.json() as { error?: string; detail?: string }; detail = j.detail || j.error || ''; } catch { /* ignore */ }
+    throw new Error(detail || `${r.status} ${r.statusText}`);
+  }
+}
+
 interface ServerEvent {
   type: string;
   sourceId?: string;

@@ -3,6 +3,9 @@ import { streamSSE } from 'hono/streaming';
 import { sessionsRepo, sourcesRepo } from './db';
 import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
+import { resolveTargetForSession, sendInput } from './tmux';
+import { log } from './logger';
+import type { AgentType } from '../shared/types';
 
 export const app = new Hono();
 
@@ -41,6 +44,37 @@ app.get('/api/sessions/:sourceId/:sessionId/entries', async (c) => {
   if (!parser) return c.json({ error: 'no parser' }, 501);
   const entries = await parser.parseEntries(session.filePath);
   return c.json({ entries });
+});
+
+app.post('/api/sessions/:sourceId/:sessionId/input', async (c) => {
+  const sourceId = c.req.param('sourceId');
+  const sessionId = c.req.param('sessionId');
+  const session = sessionsRepo.find(sourceId, sessionId);
+  if (!session) return c.json({ error: 'session not found' }, 404);
+
+  let body: { text?: unknown };
+  try { body = await c.req.json(); } catch { body = {}; }
+  const text = typeof body.text === 'string' ? body.text : '';
+  if (text.length === 0) return c.json({ error: 'text required' }, 400);
+
+  const resolved = resolveTargetForSession({
+    agent: session.agent as AgentType,
+    cwd: session.cwd,
+  });
+  if (!resolved) {
+    return c.json({
+      error: 'no matching tmux pane',
+      detail: 'No tmux pane found running this agent with a matching cwd. The session may not be attached to a multiplexer, or the agent process has exited.',
+    }, 409);
+  }
+
+  try {
+    await sendInput(resolved.target, text);
+  } catch (e) {
+    log.error({ err: e, target: resolved.target }, 'tmux send-keys failed');
+    return c.json({ error: 'send failed', detail: (e as Error).message }, 500);
+  }
+  return c.json({ ok: true, target: resolved.target });
 });
 
 app.get('/api/events', (c) => {

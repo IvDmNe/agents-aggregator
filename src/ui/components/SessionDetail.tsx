@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Entry, Session, Source } from '../../shared/types';
+import { sendSessionInput } from '../api';
 import { AgentChip, LivePip } from './AgentChip';
 import { EntryBlock } from './EntryBlock';
 import { TimelineView } from './TimelineView';
@@ -105,6 +106,75 @@ export function SessionDetail({
                     selectedEntryId={selectedEntryId} setSelectedEntryId={setSelectedEntryId}
                     compact={shape === 'inspect'} />
         )}
+      </div>
+
+      {session.live && <SendBox theme={theme} session={session} />}
+    </div>
+  );
+}
+
+interface SendBoxProps { theme: ThemeMode; session: Session; }
+function SendBox({ theme, session }: SendBoxProps) {
+  const t = themes[theme];
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const send = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await sendSessionInput(session.id, text);
+      setText('');
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ borderTop: `1px solid ${t.border}`, padding: '10px 22px 14px', background: t.bg }}>
+      {err && (
+        <div style={{ color: t.amber ?? '#c47', fontFamily: monoFont, fontSize: 11, marginBottom: 6 }}>
+          {err}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          placeholder="Type a message to inject into the live pane (Cmd/Ctrl+Enter to send)"
+          rows={2}
+          disabled={busy}
+          style={{
+            flex: 1, resize: 'vertical', minHeight: 36, maxHeight: 200,
+            background: t.panel, color: t.fg, border: `1px solid ${t.border}`,
+            borderRadius: 6, padding: '8px 10px',
+            fontFamily: monoFont, fontSize: 12, lineHeight: 1.45,
+            outline: 'none',
+          }}
+        />
+        <button
+          onClick={() => void send()}
+          disabled={busy || !text.trim()}
+          style={{
+            background: t.accent, color: '#fff', border: 'none',
+            borderRadius: 6, padding: '8px 14px',
+            fontFamily: monoFont, fontSize: 12, fontWeight: 600,
+            cursor: busy || !text.trim() ? 'default' : 'pointer',
+            opacity: busy || !text.trim() ? 0.5 : 1,
+          }}
+        >
+          {busy ? 'sending…' : 'send'}
+        </button>
       </div>
     </div>
   );
