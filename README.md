@@ -21,6 +21,17 @@ Runs entirely on your machine. No cloud, no auth, single process.
 
 Or Watch me building it in realtime: https://www.youtube.com/watch?v=ACWjW-3LFS0
 
+## Quick start
+
+```bash
+npx -y github:ptgamr/agents-aggregator source add ~/.claude
+npx -y github:ptgamr/agents-aggregator source add ~/.codex
+npx -y github:ptgamr/agents-aggregator serve --port 3000
+```
+
+Then open <http://localhost:3000>. First run takes ~15–30s (clone + build);
+subsequent runs are instant.
+
 ## Supported agents
 
 | Agent       | Folder layout                                                 |
