@@ -1,16 +1,21 @@
 # Agents Aggregator
 
 A local web app that aggregates AI coding-agent session history across multiple
-agents and accounts, with live updates as the agents run.
+agents and accounts, streams live updates as the agents run, and lets you send
+input back to agents running inside tmux.
 
 Each agent stores its session history in its own format under your home
-directory. If you run several agents — or several accounts of the same agent —
+directory. If you use several agents — or several accounts of the same agent —
 your history is scattered across `~/.claude`, `~/.claude-work`, `~/.codex`,
 `~/.codex-personal`, `~/.opencode`, `~/.pi`, etc. Agents Aggregator points at
 those folders, indexes them in a local SQLite database, and gives you one place
 to browse, filter, search, and watch sessions unfold live.
 
 Runs entirely on your machine. No cloud, no auth, single process.
+
+> **Status:** early / experimental (`0.1.0`). The session-file formats it reads
+> are not stable APIs of the upstream agents, so breakage between agent
+> releases is possible — please open an issue if you see one.
 
 ## Supported agents
 
@@ -19,10 +24,61 @@ Runs entirely on your machine. No cloud, no auth, single process.
 | Claude Code | `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`               |
 | Codex CLI   | `~/.codex/sessions/YYYY/MM/DD/rollout-<uuid>.jsonl`           |
 | Pi          | `<root>/agent/sessions/<encoded-cwd>/<file>.jsonl`            |
-| OpenCode    | sniffed (parser work in progress)                             |
+| OpenCode    | Coming soon                                                   |
 
-The aggregator auto-detects which agent a folder belongs to from its layout
-(see `src/server/parsers/base.ts`). You can override with `--agent` if needed.
+## Features
+
+- **Multi-agent support** for Claude Code, Codex CLI, and Pi — all in one UI.
+- **Multiple profiles per agent**: point at as many Claude Code or Codex
+  homes as you like (e.g. `~/.claude`, `~/.claude-work`, `~/.codex`,
+  `~/.codex-personal`) and browse them side by side. See
+  [Running multiple profiles](#running-multiple-profiles) below.
+- **Live session streaming** via Server-Sent Events. Open the UI on one
+  monitor, use your agent on another, and watch messages stream in without
+  refreshing.
+- **Send input from the web → live session** (when the session runs inside
+  tmux): type into the UI and it's delivered to the agent's terminal via
+  `tmux send-keys`, so you can drive a running agent from your browser.
+- **Inline image rendering**: screenshots and other images you attach to a
+  message are rendered directly in the transcript.
+- **Diff view and syntax-highlighted file view** for file edits and code
+  blocks — assistant messages, tool results, and file reads all get proper
+  highlighting instead of raw text.
+- **Unified session list** across all sources with filters for source, agent,
+  and working directory.
+- **Normalized rendering** of user / assistant / tool-call / tool-result /
+  thinking / bash blocks regardless of which agent produced them.
+- **Per-file tailing** with debounced `fs.watch`, byte-offset tracking, and
+  truncation detection.
+
+## Running multiple profiles
+
+Both Claude Code and Codex respect an env var that points at their home
+directory, so you can keep multiple independent profiles (different accounts,
+different workspaces) and aggregate them all here.
+
+Codex uses `CODEX_HOME`:
+
+```bash
+alias codex-one="CODEX_HOME=~/.codex-one codex"
+alias codex-two="CODEX_HOME=~/.codex-two codex"
+```
+
+Claude Code uses `CLAUDE_CONFIG_DIR`:
+
+```bash
+alias claude-one="CLAUDE_CONFIG_DIR=~/.claude-one claude"
+alias claude-two="CLAUDE_CONFIG_DIR=~/.claude-two claude"
+```
+
+Then add each directory as a source:
+
+```bash
+npm run cli -- source add ~/.claude-one --label "Claude (personal)"
+npm run cli -- source add ~/.claude-two --label "Claude (work)"
+npm run cli -- source add ~/.codex-one  --label "Codex (personal)"
+npm run cli -- source add ~/.codex-two  --label "Codex (work)"
+```
 
 ## Requirements
 
@@ -90,20 +146,6 @@ npm run cli -- scan          # re-index all enabled sources
 `<agent>` is one of `claude`, `codex`, `opencode`, `pi`. Omit it to auto-detect
 from the folder layout.
 
-## Features
-
-- **Unified session list** across all sources with filters for source, agent,
-  and working directory.
-- **Live updates** via Server-Sent Events. Open the UI on one monitor, use
-  your agent on another, and watch messages stream in without refreshing.
-- **Normalized rendering** of user / assistant / tool-call / tool-result /
-  thinking / bash blocks regardless of which agent produced them.
-- **Markdown and diff views** for assistant messages and file edits.
-- **tmux passthrough**: if a session is running inside a tmux pane, you can
-  type input into the UI and it gets sent to the agent's terminal via
-  `tmux send-keys`.
-- **Per-file tailing** with debounced `fs.watch`, byte-offset tracking, and
-  truncation detection.
 
 ## Architecture
 
@@ -140,19 +182,22 @@ src/
 ├── server/
 │   ├── index.ts                # entrypoint
 │   ├── config.ts               # config.json load/save
+│   ├── paths.ts                # XDG-style config/data paths
+│   ├── logger.ts               # pino logger
 │   ├── db.ts                   # SQLite repos
 │   ├── indexer.ts              # initial scan + upsert
 │   ├── watcher.ts              # fs.watch + debounce
 │   ├── pubsub.ts               # in-process fanout
 │   ├── tmux.ts                 # pane resolution + send-keys
 │   ├── api.ts                  # Hono routes + SSE
-│   ├── cli.ts                  # `aa` CLI
+│   ├── cli.ts                  # CLI
 │   └── parsers/
 │       ├── base.ts             # Parser interface + sniffer
+│       ├── index.ts            # agent → parser lookup
 │       ├── claude.ts
 │       ├── codex.ts
 │       └── pi.ts
-└── ui/                         # React app
+└── ui/                         # React app (Vite + TanStack Router)
 ```
 
 ## API
@@ -166,6 +211,7 @@ The HTTP API is exposed on port `3000` (the Vite dev server proxies `/api`).
 | `GET  /api/projects`                               | List distinct project (cwd) values|
 | `GET  /api/sessions/:sourceId/:sessionId`          | Session metadata                  |
 | `GET  /api/sessions/:sourceId/:sessionId/entries`  | All entries for a session         |
+| `GET  /api/sessions/:sourceId/:sessionId/file?path=` | Read a file from the session's cwd (sandboxed) |
 | `POST /api/sessions/:sourceId/:sessionId/input`    | Send `{ text }` to the tmux pane  |
 | `GET  /api/events`                                 | SSE stream of activity            |
 
@@ -176,19 +222,16 @@ npm run build      # tsc -b && vite build
 npm run preview    # serve the built UI
 ```
 
-## Roadmap
+## Contributing
 
-See `PLAN.md` for the implementation phases (Pi → live watch → Claude →
-Codex → OpenCode) and `ROADMAP.md` for the longer-term direction including a
-commercial cloud layer.
+Issues and PRs welcome. The parser layer is the easiest place to contribute:
+implement the `Parser` interface in `src/server/parsers/base.ts` for a new
+agent and wire it into `src/server/parsers/index.ts`. The existing
+`claude.ts`, `codex.ts`, and `pi.ts` parsers are good references for the
+shape of the work — sniffing, JSONL streaming, and normalizing into the
+shared `Entry`/`Block` types in `src/shared/types.ts`.
 
 ## License
 
-TBD — pick a license before publishing (MIT or Apache-2.0 recommended).
-
-## Contributing
-
-Issues and PRs welcome once the repo is public. The parser layer is the
-easiest place to contribute: implement the `Parser` interface in
-`src/server/parsers/base.ts` for a new agent and wire it into
-`src/server/parsers/index.ts`.
+> **TODO before publishing:** add a `LICENSE` file and replace this section.
+> MIT or Apache-2.0 are the typical choices for tooling like this.
