@@ -194,9 +194,15 @@ export function SessionDetail({
           {loading && entries.length === 0 && (
             <div style={{ padding: 24, color: t.dim, fontSize: 13, fontFamily: monoFont }}>loading entries…</div>
           )}
-          <ChatView theme={theme} treatment={treatment} dense={dense}
-                    entries={entries} session={session} readerMode={mode === 'reader'}
-                    selectedEntryId={selectedEntryId} setSelectedEntryId={setSelectedEntryId} />
+          {/* Reader mode narrows just the transcript for comfortable line length;
+              the summary block above stays at the full panel width. */}
+          <div style={mode === 'reader'
+            ? { maxWidth: 680, width: '100%', margin: '0 auto' } as const
+            : undefined}>
+            <ChatView theme={theme} treatment={treatment} dense={dense}
+                      entries={entries} session={session} readerMode={mode === 'reader'}
+                      selectedEntryId={selectedEntryId} setSelectedEntryId={setSelectedEntryId} />
+          </div>
         </div>
       </div>
 
@@ -341,6 +347,7 @@ function ChatView({ theme, treatment, entries, session, readerMode, selectedEntr
       {visible.map((e, i) => (
         <EntryBlock key={e.id} entry={e} theme={theme} session={session}
                     compact={false} treatment={treatment}
+                    readable={readerMode}
                     isNew={i === visible.length - 1}
                     selected={e.id === selectedEntryId}
                     onSelect={setSelectedEntryId} />

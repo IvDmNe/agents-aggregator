@@ -9,17 +9,21 @@ interface MarkdownProps {
   content: string;
   /** Compact mode for thinking blocks (smaller text, tighter spacing). */
   compact?: boolean;
+  /** Long-form reading mode: serif body, larger type, looser leading. */
+  readable?: boolean;
 }
 
-export function Markdown({ theme, content, compact }: MarkdownProps) {
+export function Markdown({ theme, content, compact, readable }: MarkdownProps) {
   const t = themes[theme];
   const fg = compact ? t.dim : t.fg;
   const fg2 = compact ? t.dim2 : t.fg2;
   const { open: openLightbox } = useLightbox();
+  const lh = readable ? 1.7 : 1.55;
+  const blockMargin = readable ? '0 0 1em' : '0 0 0.6em';
 
   const components: Components = {
     p: ({ children }) => (
-      <p style={{ margin: '0 0 0.6em', lineHeight: 1.55 }}>{children}</p>
+      <p style={{ margin: blockMargin, lineHeight: lh }}>{children}</p>
     ),
     h1: ({ children }) => <h2 style={headingStyle(1.25)}>{children}</h2>,
     h2: ({ children }) => <h3 style={headingStyle(1.15)}>{children}</h3>,
@@ -28,12 +32,12 @@ export function Markdown({ theme, content, compact }: MarkdownProps) {
     h5: ({ children }) => <h6 style={headingStyle(0.95)}>{children}</h6>,
     h6: ({ children }) => <h6 style={headingStyle(0.9)}>{children}</h6>,
     ul: ({ children }) => (
-      <ul style={{ margin: '0 0 0.6em', paddingLeft: 22, lineHeight: 1.55 }}>{children}</ul>
+      <ul style={{ margin: blockMargin, paddingLeft: 22, lineHeight: lh }}>{children}</ul>
     ),
     ol: ({ children }) => (
-      <ol style={{ margin: '0 0 0.6em', paddingLeft: 22, lineHeight: 1.55 }}>{children}</ol>
+      <ol style={{ margin: blockMargin, paddingLeft: 22, lineHeight: lh }}>{children}</ol>
     ),
-    li: ({ children }) => <li style={{ margin: '0.15em 0' }}>{children}</li>,
+    li: ({ children }) => <li style={{ margin: readable ? '0.3em 0' : '0.15em 0' }}>{children}</li>,
     strong: ({ children }) => <strong style={{ fontWeight: 600, color: t.fg }}>{children}</strong>,
     em: ({ children }) => <em>{children}</em>,
     del: ({ children }) => <del style={{ color: fg2 }}>{children}</del>,
@@ -118,7 +122,9 @@ export function Markdown({ theme, content, compact }: MarkdownProps) {
 
   return (
     <div style={{
-      color: fg, fontSize: compact ? 13.5 : 14,
+      color: fg,
+      fontSize: readable ? 16 : (compact ? 13.5 : 14),
+      lineHeight: readable ? lh : undefined,
       // Long URLs, JSON, identifiers must wrap or they push the column wide.
       overflowWrap: 'anywhere', wordBreak: 'break-word',
       minWidth: 0,

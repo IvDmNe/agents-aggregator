@@ -189,7 +189,7 @@ export function SummaryPanel({ theme, sessionId, onClose, preloaded, onGenerated
         )}
       </div>
 
-      <div style={{ padding: '12px 16px', maxHeight: 480, overflow: 'auto' }}>
+      <div style={{ padding: '20px 24px 24px', maxHeight: 520, overflow: 'auto' }}>
         {status === 'idle' && (
           <div style={{ color: t.dim, fontSize: 13, fontFamily: monoFont }}>
             Click Claude or Codex above to generate a summary.
@@ -200,7 +200,7 @@ export function SummaryPanel({ theme, sessionId, onClose, preloaded, onGenerated
             {errorDetail || 'Summary failed.'}
           </div>
         )}
-        {text && <Markdown theme={theme} content={text} />}
+        {text && <Markdown theme={theme} content={text} readable />}
         {status === 'streaming' && !text && (
           <div style={{ color: t.dim, fontSize: 13, fontFamily: monoFont }}>distilling and waiting on {backend}…</div>
         )}

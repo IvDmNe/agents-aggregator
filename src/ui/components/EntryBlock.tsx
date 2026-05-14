@@ -20,12 +20,16 @@ interface EntryBlockProps {
   treatment: AgentTreatment;
   isNew: boolean;
   selected: boolean;
+  /** When `true`, user/assistant entries render in long-form article style:
+   *  larger serif body, no avatar bubble, just a small byline. Tool / bash /
+   *  thinking entries are filtered upstream so we don't restyle them. */
+  readable?: boolean;
   /** Called with the entry id when the row is clicked. Keep this reference
    *  stable (e.g. a `useState` setter) — `EntryBlock` is memoized. */
   onSelect: (id: string) => void;
 }
 
-function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, onSelect }: EntryBlockProps) {
+function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, readable, onSelect }: EntryBlockProps) {
   const handleSelect = () => onSelect(e.id);
   const t = themes[theme];
   const { open: openPreview } = useFilePreview();
@@ -164,7 +168,46 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, on
     );
   }
 
-  // user / assistant
+  // user / assistant — article-style in readable mode, chat-style otherwise.
+  if (readable) {
+    const byline = isUser ? 'You' : (session.agent.charAt(0).toUpperCase() + session.agent.slice(1));
+    return (
+      <div onClick={handleSelect} style={{
+        ...baseStyle,
+        padding: '18px 4px 22px',
+        background: selected ? t.panel : 'transparent',
+        border: `1px solid ${selected ? t.accent : 'transparent'}`,
+        borderBottom: `1px solid ${selected ? t.accent : t.border2}`,
+      }}>
+        <div style={{
+          fontFamily: monoFont, fontSize: 11,
+          color: isUser ? t.accent : t.dim2,
+          letterSpacing: '0.1em', textTransform: 'uppercase',
+          marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center',
+        }}>
+          <span style={{ fontWeight: 600 }}>{byline}</span>
+          <span style={{ color: t.dim2 }}>{e.timestamp}</span>
+          {e.streaming && (
+            <span style={{ color: t.green, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <LivePip theme={theme} loud={true} size={5} /> streaming
+            </span>
+          )}
+        </div>
+        <div style={{ color: t.fg }}>
+          {e.text && <Markdown theme={theme} content={e.text} readable />}
+          {e.images && e.images.length > 0 && <Images images={e.images} theme={theme} />}
+          {e.streaming && (
+            <span style={{
+              display: 'inline-block', width: 7, height: 18, marginLeft: 2,
+              background: t.green, verticalAlign: 'text-bottom',
+              animation: 'caret 1s steps(2) infinite',
+            }} />
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div onClick={handleSelect} style={{
       ...baseStyle, display: 'flex', gap: 10, padding: '8px',
