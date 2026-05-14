@@ -22,13 +22,13 @@ export interface Parser {
  * Pi:       <root>/agent/sessions/<encoded-cwd>/<file>.jsonl
  * Claude:   <root>/projects/<encoded-cwd>/<uuid>.jsonl
  * Codex:    <root>/sessions/YYYY/MM/DD/rollout-<uuid>.jsonl
- * OpenCode: unknown (TBD in phase 5)
+ * OpenCode: <root>/opencode.db (SQLite, typically ~/.local/share/opencode)
  */
 export function sniffAgent(root: string): AgentType | null {
   if (!fs.existsSync(root)) return null;
+  if (fs.existsSync(path.join(root, 'opencode.db'))) return 'opencode';
   if (fs.existsSync(path.join(root, 'agent', 'sessions'))) return 'pi';
   if (fs.existsSync(path.join(root, 'projects'))) return 'claude';
   if (fs.existsSync(path.join(root, 'sessions'))) return 'codex';
-  if (fs.existsSync(path.join(root, 'config'))) return 'opencode';
   return null;
 }

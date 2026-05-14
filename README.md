@@ -26,18 +26,20 @@ Runs entirely on your machine. No cloud, no auth, single process.
 | Claude Code | `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`               |
 | Codex CLI   | `~/.codex/sessions/YYYY/MM/DD/rollout-<uuid>.jsonl`           |
 | Pi          | `<root>/agent/sessions/<encoded-cwd>/<file>.jsonl`            |
-| OpenCode    | Coming soon                                                   |
+| OpenCode    | `~/.local/share/opencode/opencode.db` (SQLite, read-only)     |
 
 ## Features
 
-- **Multi-agent support** for Claude Code, Codex CLI, and Pi — all in one UI.
+- **Multi-agent support** for Claude Code, Codex CLI, OpenCode, and Pi — all
+  in one UI.
 - **Multiple profiles per agent**: point at as many Claude Code or Codex
   homes as you like (e.g. `~/.claude`, `~/.claude-work`, `~/.codex`,
   `~/.codex-personal`) and browse them side by side. See
   [Running multiple profiles](#running-multiple-profiles) below.
 - **Live session streaming** via Server-Sent Events. Open the UI on one
   monitor, use your agent on another, and watch messages stream in without
-  refreshing.
+  refreshing. (OpenCode sessions update on rescan rather than live —
+  they're SQLite-backed, not JSONL-tailed.)
 - **Send input from the web → live session** (when the session runs inside
   tmux): type into the UI and it's delivered to the agent's terminal via
   `tmux send-keys`, so you can drive a running agent from your browser.
@@ -101,6 +103,7 @@ Add at least one source folder:
 ```bash
 npm run cli -- source add ~/.claude
 npm run cli -- source add ~/.codex
+npm run cli -- source add ~/.local/share/opencode
 npm run cli -- source add ~/.pi
 ```
 
@@ -152,12 +155,12 @@ from the folder layout.
 ## Architecture
 
 ```
-Source folders (~/.pi, ~/.claude, ~/.codex, …)
+Source folders (~/.claude, ~/.codex, ~/.local/share/opencode, ~/.pi, …)
         │
         ▼
-  Watcher (fs.watch, recursive, debounced ~100ms)
+  Watcher (fs.watch on .jsonl, recursive, debounced ~100ms)
         │
-  Parser per agent (claude, codex, pi, opencode)
+  Parser per agent (claude, codex, opencode, pi)
         │
   Indexer → SQLite (better-sqlite3)
         │
@@ -198,6 +201,7 @@ src/
 │       ├── index.ts            # agent → parser lookup
 │       ├── claude.ts
 │       ├── codex.ts
+│       ├── opencode.ts         # SQLite-backed (reads opencode.db)
 │       └── pi.ts
 └── ui/                         # React app (Vite + TanStack Router)
 ```
@@ -228,10 +232,11 @@ npm run preview    # serve the built UI
 
 Issues and PRs welcome. The parser layer is the easiest place to contribute:
 implement the `Parser` interface in `src/server/parsers/base.ts` for a new
-agent and wire it into `src/server/parsers/index.ts`. The existing
-`claude.ts`, `codex.ts`, and `pi.ts` parsers are good references for the
-shape of the work — sniffing, JSONL streaming, and normalizing into the
-shared `Entry`/`Block` types in `src/shared/types.ts`.
+agent and wire it into `src/server/parsers/index.ts`. The existing parsers
+are good references for the shape of the work — `claude.ts`, `codex.ts`,
+and `pi.ts` for JSONL-on-disk formats, and `opencode.ts` for a
+SQLite-backed format. All of them sniff, parse session metadata, and
+normalize into the shared `Entry`/`Block` types in `src/shared/types.ts`.
 
 ## License
 

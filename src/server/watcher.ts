@@ -37,6 +37,11 @@ function watchSource(src: ConfigSource): (() => void) | null {
     return null;
   }
 
+  // OpenCode stores sessions in a SQLite DB rather than .jsonl files, so the
+  // file-watcher model doesn't apply. Skip live tailing for now — sessions
+  // appear on the next manual scan.
+  if (src.agent === 'opencode') return null;
+
   // Watch the sessions parent dir for each agent so we don't pick up
   // unrelated files (and so fs.watch on macOS/Linux doesn't scan huge trees).
   const watchDir =
