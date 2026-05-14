@@ -233,5 +233,4 @@ shared `Entry`/`Block` types in `src/shared/types.ts`.
 
 ## License
 
-> **TODO before publishing:** add a `LICENSE` file and replace this section.
-> MIT or Apache-2.0 are the typical choices for tooling like this.
+[MIT](./LICENSE) © Anh Trinh
