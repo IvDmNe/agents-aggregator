@@ -39,6 +39,13 @@ export function TabBar({ theme, pinnedSessions, activeTab, setActiveTab, onUnpin
         kind="home"
         loud={loud}
       />
+      <TabChip
+        theme={theme}
+        active={activeTab === 'journal'}
+        onClick={() => setActiveTab('journal')}
+        kind="journal"
+        loud={loud}
+      />
       {pinnedSessions.map((s) => (
         <TabChip
           key={s.id}
@@ -60,7 +67,7 @@ interface TabChipProps {
   active: boolean;
   onClick: () => void;
   onClose?: (e: React.MouseEvent) => void;
-  kind?: 'home';
+  kind?: 'home' | 'journal';
   session?: TabSession;
   loud: boolean;
 }
@@ -68,8 +75,10 @@ interface TabChipProps {
 function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: TabChipProps) {
   const t = themes[theme];
   const isHome = kind === 'home';
+  const isJournal = kind === 'journal';
+  const isFixed = isHome || isJournal;
 
-  const railColor = isHome ? t.accent : (s ? AGENT_HUES[theme][s.agent].fg : t.accent);
+  const railColor = isFixed ? t.accent : (s ? AGENT_HUES[theme][s.agent].fg : t.accent);
 
   return (
     <div
@@ -77,12 +86,12 @@ function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: Ta
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: isHome ? '0 14px 0 12px' : '0 8px 0 12px',
+        padding: isFixed ? '0 14px 0 12px' : '0 8px 0 12px',
         cursor: 'pointer',
         background: active ? t.bg : 'transparent',
         borderRight: `1px solid ${t.border}`,
         borderLeft: isHome ? `1px solid ${t.border}` : 'none',
-        minWidth: isHome ? 0 : 160, maxWidth: 240,
+        minWidth: isFixed ? 0 : 160, maxWidth: 240,
         fontSize: 12,
         color: active ? t.fg : t.dim,
       } as CSSProperties}
@@ -94,7 +103,7 @@ function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: Ta
         }} />
       )}
 
-      {isHome || !s ? (
+      {isHome ? (
         <>
           <span style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -106,7 +115,21 @@ function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: Ta
           </span>
           <span style={{ fontWeight: 500 }}>Home</span>
         </>
-      ) : (
+      ) : isJournal ? (
+        <>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 14, height: 14, color: active ? t.fg : t.dim,
+          }}>
+            <svg viewBox="0 0 16 16" width={13} height={13} fill="none" stroke="currentColor" strokeWidth={1.4}>
+              <path d="M3 2h8.5a1.5 1.5 0 011.5 1.5V14H4.5A1.5 1.5 0 013 12.5V2z" />
+              <path d="M3 11.5h10" />
+              <path d="M6 4.5h4M6 7h3" strokeLinecap="round" />
+            </svg>
+          </span>
+          <span style={{ fontWeight: 500 }}>Journal</span>
+        </>
+      ) : !s ? null : (
         <>
           <span style={{
             width: 8, height: 8, borderRadius: 2,

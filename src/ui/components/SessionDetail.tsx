@@ -3,13 +3,17 @@ import type { Entry, Session, Source } from '../../shared/types';
 import type { BlurredProjects } from '../hooks/useBlurredProjects';
 import { sendSessionInput, useSummaryStatus } from '../api';
 import { lastPathSegment, relativeTime } from '../format';
+import { ProposalSheet } from '../journal/ProposalSheet';
+import { SelectionCaptureToolbar } from '../journal/SelectionCaptureToolbar';
+import { SummarizeButton } from '../journal/SummarizeButton';
+import type { JournalKind, JournalProposal } from '../journal/types';
 import { AgentChip, LivePip } from './AgentChip';
 import { EntryBlock } from './EntryBlock';
 import { PinGlyph } from './PinGlyph';
 import { SummaryPanel } from './SummaryPanel';
 import {
   monoFont, themes,
-  type AgentTreatment, type Theme, type ThemeMode,
+  type AgentTreatment, type SummarizeBackend, type Theme, type ThemeMode,
 } from '../theme';
 
 type ViewMode = 'chat' | 'reader';
@@ -34,11 +38,33 @@ interface SessionDetailProps {
   onTogglePin: () => void;
   onOpenInTab: () => void;
   onBackHome?: () => void;
+  /** Per-entry capture handler. Omitting it hides the inline capture buttons.
+   *  Pass an optional `text` to override the captured body (e.g. when the user
+   *  picked a snippet via the selection toolbar). */
+  onCapture?: (entry: Entry, kind: JournalKind, text?: string) => void;
+  /** Proposals currently pending for this session (from `summarize → journal`). */
+  proposals?: JournalProposal[];
+  /** When `true`, the floating proposals panel is visible. */
+  proposalsOpen?: boolean;
+  /** Click on the summarize button when proposals already exist toggles the
+   *  panel via this callback instead of re-running the model. */
+  onToggleProposalsPanel?: () => void;
+  /** Called once the model returns parsed proposals. */
+  onProposals?: (proposals: JournalProposal[]) => void;
+  onAcceptProposal?: (p: JournalProposal) => void;
+  onAcceptAllProposals?: (ps: JournalProposal[]) => void;
+  onDismissProposals?: () => void;
+  /** Backend to use for the summarize→journal extractor. */
+  summarizeBackend?: SummarizeBackend;
 }
 
 export function SessionDetail({
   theme, treatment, dense, loud, session, sources, entries, selectedEntryId, setSelectedEntryId, loading, onBack, blurred,
   inTab, isPinned, onTogglePin, onOpenInTab, onBackHome,
+  onCapture,
+  proposals, proposalsOpen, onToggleProposalsPanel,
+  onProposals, onAcceptProposal, onAcceptAllProposals, onDismissProposals,
+  summarizeBackend,
 }: SessionDetailProps) {
   const t = themes[theme];
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -81,7 +107,7 @@ export function SessionDetail({
     : {};
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, background: t.bg, flex: 1 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, background: t.bg, flex: 1, position: 'relative' }}>
       <div style={{ padding: `${inTab ? 18 : 14}px ${pad}px`, borderBottom: `1px solid ${t.border}` }}>
         <div style={innerWrapStyle}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
@@ -119,6 +145,16 @@ export function SessionDetail({
                     <button onClick={onOpenInTab} style={headerBtnStyle(t)}>Open in tab ↗</button>
                   )}
                 </>
+              )}
+              {onProposals && (
+                <SummarizeButton
+                  theme={theme} session={session}
+                  entries={entries} onProposals={onProposals}
+                  backend={summarizeBackend}
+                  proposalsCount={proposals?.length ?? 0}
+                  panelOpen={!!proposalsOpen}
+                  onToggle={onToggleProposalsPanel}
+                />
               )}
               <button style={headerBtnStyle(t)}>fork</button>
               <button style={headerBtnStyle(t)}>share</button>
@@ -201,12 +237,35 @@ export function SessionDetail({
             : undefined}>
             <ChatView theme={theme} treatment={treatment} dense={dense}
                       entries={entries} session={session} readerMode={mode === 'reader'}
-                      selectedEntryId={selectedEntryId} setSelectedEntryId={setSelectedEntryId} />
+                      selectedEntryId={selectedEntryId} setSelectedEntryId={setSelectedEntryId}
+                      onCapture={onCapture} />
           </div>
         </div>
       </div>
 
       {session.live && <SendBox theme={theme} session={session} pad={pad} innerWrapStyle={innerWrapStyle} />}
+
+      {onCapture && (
+        <SelectionCaptureToolbar
+          theme={theme} entries={entries}
+          onCapture={(entry, kind, text) => onCapture(entry, kind, text)}
+        />
+      )}
+
+      {proposalsOpen && proposals && proposals.length > 0
+        && onAcceptProposal && onAcceptAllProposals && onDismissProposals && (
+        <ProposalSheet
+          floating
+          // Sit above the SendBox when the session is live, otherwise hug bottom.
+          floatingBottom={session.live ? 92 : 20}
+          theme={theme} proposals={proposals}
+          projectKey={session.cwd}
+          onAccept={onAcceptProposal}
+          onAcceptAll={onAcceptAllProposals}
+          onDismiss={onDismissProposals}
+          onClose={onToggleProposalsPanel}
+        />
+      )}
     </div>
   );
 }
@@ -321,6 +380,7 @@ interface ChatViewProps {
   readerMode: boolean;
   selectedEntryId: string | undefined;
   setSelectedEntryId: (id: string) => void;
+  onCapture?: (entry: Entry, kind: JournalKind) => void;
 }
 
 function isReadable(e: Entry): boolean {
@@ -330,10 +390,17 @@ function isReadable(e: Entry): boolean {
   return false;
 }
 
-function ChatView({ theme, treatment, entries, session, readerMode, selectedEntryId, setSelectedEntryId }: ChatViewProps) {
+function ChatView({ theme, treatment, entries, session, readerMode, selectedEntryId, setSelectedEntryId, onCapture }: ChatViewProps) {
   const t = themes[theme];
   const visible = readerMode ? entries.filter(isReadable) : entries;
   const hidden = readerMode ? entries.length - visible.length : 0;
+  // EntryBlock is memoized — keep this callback identity stable per (entry, kind).
+  const onEntryCapture = onCapture
+    ? (entryId: string, kind: JournalKind) => {
+        const entry = visible.find((x) => x.id === entryId);
+        if (entry) onCapture(entry, kind);
+      }
+    : undefined;
   return (
     <div>
       {readerMode && hidden > 0 && (
@@ -350,7 +417,8 @@ function ChatView({ theme, treatment, entries, session, readerMode, selectedEntr
                     readable={readerMode}
                     isNew={i === visible.length - 1}
                     selected={e.id === selectedEntryId}
-                    onSelect={setSelectedEntryId} />
+                    onSelect={setSelectedEntryId}
+                    onCapture={onEntryCapture} />
       ))}
     </div>
   );

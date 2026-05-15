@@ -65,6 +65,21 @@ function initSchema(db: Database.Database): void {
       createdAt         TEXT NOT NULL,
       PRIMARY KEY (sourceId, sessionId, backend)
     );
+
+    CREATE TABLE IF NOT EXISTS journal_item (
+      id              TEXT PRIMARY KEY,
+      kind            TEXT NOT NULL,
+      text            TEXT NOT NULL,
+      projectKey      TEXT NOT NULL,
+      sourceSessionId TEXT,
+      sourceEntryId   TEXT,
+      agent           TEXT,
+      tags            TEXT NOT NULL DEFAULT '[]',
+      createdAt       INTEGER NOT NULL,
+      done            INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS journal_item_by_project ON journal_item(projectKey);
+    CREATE INDEX IF NOT EXISTS journal_item_by_created ON journal_item(createdAt DESC);
   `);
 }
 
@@ -257,6 +272,74 @@ export const summariesRepo = {
            createdAt=excluded.createdAt`,
       )
       .run(row);
+  },
+};
+
+export interface JournalItemRow {
+  id: string;
+  kind: 'learning' | 'next' | 'note';
+  text: string;
+  projectKey: string;
+  sourceSessionId: string | null;
+  sourceEntryId: string | null;
+  agent: 'claude' | 'codex' | 'opencode' | 'pi' | null;
+  /** JSON-encoded `string[]` in the DB; decoded by the wire layer. */
+  tags: string;
+  createdAt: number;
+  done: number;
+}
+
+export const journalRepo = {
+  list(): JournalItemRow[] {
+    return getDb()
+      .prepare<unknown[], JournalItemRow>(
+        `SELECT * FROM journal_item ORDER BY createdAt DESC`,
+      )
+      .all();
+  },
+  insert(row: JournalItemRow): void {
+    getDb()
+      .prepare(
+        `INSERT INTO journal_item(id,kind,text,projectKey,sourceSessionId,sourceEntryId,agent,tags,createdAt,done)
+         VALUES (@id,@kind,@text,@projectKey,@sourceSessionId,@sourceEntryId,@agent,@tags,@createdAt,@done)`,
+      )
+      .run(row);
+  },
+  insertMany(rows: JournalItemRow[]): void {
+    const stmt = getDb().prepare(
+      `INSERT INTO journal_item(id,kind,text,projectKey,sourceSessionId,sourceEntryId,agent,tags,createdAt,done)
+       VALUES (@id,@kind,@text,@projectKey,@sourceSessionId,@sourceEntryId,@agent,@tags,@createdAt,@done)`,
+    );
+    const tx = getDb().transaction((batch: JournalItemRow[]) => {
+      for (const r of batch) stmt.run(r);
+    });
+    tx(rows);
+  },
+  update(id: string, patch: Partial<Omit<JournalItemRow, 'id' | 'createdAt'>>): JournalItemRow | null {
+    const fields: string[] = [];
+    const params: Record<string, unknown> = { id };
+    for (const [k, v] of Object.entries(patch)) {
+      fields.push(`${k} = @${k}`);
+      params[k] = v;
+    }
+    if (fields.length === 0) {
+      return getDb()
+        .prepare<unknown[], JournalItemRow>(`SELECT * FROM journal_item WHERE id = ?`)
+        .get(id) ?? null;
+    }
+    getDb()
+      .prepare(`UPDATE journal_item SET ${fields.join(', ')} WHERE id = @id`)
+      .run(params);
+    return getDb()
+      .prepare<unknown[], JournalItemRow>(`SELECT * FROM journal_item WHERE id = ?`)
+      .get(id) ?? null;
+  },
+  remove(id: string): boolean {
+    const r = getDb().prepare(`DELETE FROM journal_item WHERE id = ?`).run(id);
+    return r.changes > 0;
+  },
+  clear(): void {
+    getDb().prepare(`DELETE FROM journal_item`).run();
   },
 };
 

@@ -56,6 +56,24 @@ export interface EntryImage {
   url?: string;
 }
 
+// ── Journal ───────────────────────────────────────────────────────────────
+export type JournalKind = 'learning' | 'next' | 'note';
+
+export interface JournalItem {
+  id: string;
+  kind: JournalKind;
+  text: string;
+  /** Project identity (currently `session.cwd` — see notes in HANDOFF.md). */
+  projectKey: string;
+  sourceSessionId: string | null;
+  sourceEntryId: string | null;
+  agent: AgentType | null;
+  tags: string[];
+  createdAt: number;
+  /** Only meaningful when `kind === 'next'`. */
+  done: boolean;
+}
+
 export interface Entry {
   id: string;
   role: EntryRole;

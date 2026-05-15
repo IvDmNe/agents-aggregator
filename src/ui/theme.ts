@@ -91,11 +91,19 @@ export const monoFont = '"JetBrains Mono", "Geist Mono", ui-monospace, monospace
 export type AgentTreatment = 'chip' | 'letter' | 'text';
 export type Density = 'compact' | 'comfy';
 
+/** Backend used for any LLM call from the UI (journal extractor, etc.). The
+ *  reader-mode Summary panel still picks per-session via its own buttons. */
+export type SummarizeBackend = 'claude' | 'codex';
+
 export interface Tweaks {
   theme: ThemeMode;
   density: Density;
   agentTreatment: AgentTreatment;
   liveLoud: boolean;
+  /** When false, the per-entry hover capture buttons are hidden. The
+   *  `summarize → journal` button and the Journal tab are always available. */
+  journalCapture: boolean;
+  summarizeBackend: SummarizeBackend;
 }
 
 export const TWEAK_DEFAULTS: Tweaks = {
@@ -103,4 +111,12 @@ export const TWEAK_DEFAULTS: Tweaks = {
   density: 'compact',
   agentTreatment: 'chip',
   liveLoud: true,
+  journalCapture: true,
+  summarizeBackend: 'claude',
 };
+
+/** Human label for which model a given backend will use. Display-only —
+ *  authoritative model names are set inside `src/server/summarize.ts`. */
+export function backendModelLabel(b: SummarizeBackend): string {
+  return b === 'claude' ? 'claude haiku' : 'codex';
+}

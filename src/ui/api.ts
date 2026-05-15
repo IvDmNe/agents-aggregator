@@ -156,6 +156,26 @@ export function useSummaryStatus(sessionId: string | undefined, refreshKey: numb
   return { data, loading };
 }
 
+export async function extractJournal(
+  prompt: string,
+  backend: 'claude' | 'codex' = 'claude',
+  signal?: AbortSignal,
+): Promise<string> {
+  const r = await fetch('/api/journal/extract', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ prompt, backend }),
+    signal,
+  });
+  if (!r.ok) {
+    let detail = '';
+    try { const j = await r.json() as { error?: string; detail?: string }; detail = j.detail || j.error || ''; } catch { /* ignore */ }
+    throw new Error(detail || `${r.status} ${r.statusText}`);
+  }
+  const j = await r.json() as { text?: string };
+  return j.text ?? '';
+}
+
 export async function sendSessionInput(sessionId: string, text: string): Promise<void> {
   const parts = splitSessionId(sessionId);
   if (!parts) throw new Error('bad session id');
