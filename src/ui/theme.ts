@@ -96,6 +96,9 @@ export interface Tweaks {
   density: Density;
   agentTreatment: AgentTreatment;
   liveLoud: boolean;
+  /** When false, the per-entry hover capture buttons are hidden. The
+   *  `summarize → journal` button and the Journal tab are always available. */
+  journalCapture: boolean;
 }
 
 export const TWEAK_DEFAULTS: Tweaks = {
@@ -103,4 +106,5 @@ export const TWEAK_DEFAULTS: Tweaks = {
   density: 'compact',
   agentTreatment: 'chip',
   liveLoud: true,
+  journalCapture: true,
 };

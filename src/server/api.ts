@@ -5,14 +5,14 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { getMimeType } from 'hono/utils/mime';
 import { Readable } from 'node:stream';
-import { sessionsRepo, sourcesRepo, summariesRepo } from './db';
+import { journalRepo, sessionsRepo, sourcesRepo, summariesRepo, type JournalItemRow } from './db';
 import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
 import { resolveTargetForSession, sendInput } from './tmux';
 import { distill } from './distill';
-import { summarize, type Backend } from './summarize';
+import { completeWithClaude, summarize, type Backend } from './summarize';
 import { log } from './logger';
-import type { AgentType } from '../shared/types';
+import type { AgentType, JournalItem, JournalKind } from '../shared/types';
 
 const MAX_FILE_BYTES = 1024 * 1024; // 1 MB
 
@@ -259,6 +259,144 @@ app.get('/api/sessions/:sourceId/:sessionId/summary', async (c) => {
       });
     }
   });
+});
+
+// ── Journal CRUD ────────────────────────────────────────────────────────────
+
+const VALID_KINDS = new Set<JournalKind>(['learning', 'next', 'note']);
+const VALID_AGENTS = new Set<AgentType>(['claude', 'codex', 'opencode', 'pi']);
+
+/** Row → wire shape (decode tags, coerce done). */
+function rowToJournal(r: JournalItemRow): JournalItem {
+  let tags: string[] = [];
+  try {
+    const parsed = JSON.parse(r.tags) as unknown;
+    if (Array.isArray(parsed)) tags = parsed.filter((x): x is string => typeof x === 'string');
+  } catch { /* ignore */ }
+  return {
+    id: r.id,
+    kind: r.kind,
+    text: r.text,
+    projectKey: r.projectKey,
+    sourceSessionId: r.sourceSessionId,
+    sourceEntryId: r.sourceEntryId,
+    agent: r.agent,
+    tags,
+    createdAt: r.createdAt,
+    done: !!r.done,
+  };
+}
+
+/** Parse + validate a body payload. Throws on first invalid field — we expect
+ *  the UI to only send shapes it just rendered, so an error here is a bug. */
+function coerceJournalRow(body: unknown, fallbackId?: string): JournalItemRow {
+  if (!body || typeof body !== 'object') throw new Error('object required');
+  const o = body as Record<string, unknown>;
+  const id = typeof o.id === 'string' && o.id ? o.id : (fallbackId ?? `j-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+  const kind = String(o.kind);
+  if (!VALID_KINDS.has(kind as JournalKind)) throw new Error(`bad kind: ${kind}`);
+  const text = typeof o.text === 'string' ? o.text.slice(0, 8000) : '';
+  if (!text.trim()) throw new Error('text required');
+  const projectKey = typeof o.projectKey === 'string' && o.projectKey ? o.projectKey : '';
+  if (!projectKey) throw new Error('projectKey required');
+  const sourceSessionId = typeof o.sourceSessionId === 'string' ? o.sourceSessionId : null;
+  const sourceEntryId = typeof o.sourceEntryId === 'string' ? o.sourceEntryId : null;
+  const agentRaw = typeof o.agent === 'string' ? o.agent : null;
+  const agent = agentRaw && VALID_AGENTS.has(agentRaw as AgentType) ? (agentRaw as AgentType) : null;
+  const tagsArr = Array.isArray(o.tags)
+    ? o.tags.filter((x): x is string => typeof x === 'string').slice(0, 8)
+    : [];
+  const createdAtRaw = typeof o.createdAt === 'number' ? o.createdAt : Date.now();
+  const done = o.done === true || o.done === 1 ? 1 : 0;
+  return {
+    id, kind: kind as JournalKind, text, projectKey,
+    sourceSessionId, sourceEntryId, agent,
+    tags: JSON.stringify(tagsArr),
+    createdAt: createdAtRaw, done,
+  };
+}
+
+app.get('/api/journal/items', (c) => {
+  return c.json({ items: journalRepo.list().map(rowToJournal) });
+});
+
+app.post('/api/journal/items', async (c) => {
+  let body: unknown;
+  try { body = await c.req.json(); } catch { return c.json({ error: 'bad json' }, 400); }
+  const bodyObj = body as { item?: unknown; items?: unknown };
+  // Accept either { item: {...} } or { items: [...] } for batch insert.
+  if (Array.isArray(bodyObj.items)) {
+    try {
+      const rows = bodyObj.items.map((it) => coerceJournalRow(it));
+      journalRepo.insertMany(rows);
+      return c.json({ items: rows.map(rowToJournal) });
+    } catch (err) {
+      return c.json({ error: 'bad item', detail: (err as Error).message }, 400);
+    }
+  }
+  const itemPayload = bodyObj.item ?? body;
+  try {
+    const row = coerceJournalRow(itemPayload);
+    journalRepo.insert(row);
+    return c.json({ item: rowToJournal(row) });
+  } catch (err) {
+    return c.json({ error: 'bad item', detail: (err as Error).message }, 400);
+  }
+});
+
+app.patch('/api/journal/items/:id', async (c) => {
+  const id = c.req.param('id');
+  let body: unknown;
+  try { body = await c.req.json(); } catch { return c.json({ error: 'bad json' }, 400); }
+  const o = (body ?? {}) as Record<string, unknown>;
+  const patch: Partial<Omit<JournalItemRow, 'id' | 'createdAt'>> = {};
+  if (typeof o.text === 'string') patch.text = o.text.slice(0, 8000);
+  if (typeof o.kind === 'string') {
+    if (!VALID_KINDS.has(o.kind as JournalKind)) return c.json({ error: 'bad kind' }, 400);
+    patch.kind = o.kind as JournalKind;
+  }
+  if (typeof o.done === 'boolean') patch.done = o.done ? 1 : 0;
+  if (Array.isArray(o.tags)) {
+    const tags = o.tags.filter((x): x is string => typeof x === 'string').slice(0, 8);
+    patch.tags = JSON.stringify(tags);
+  }
+  const row = journalRepo.update(id, patch);
+  if (!row) return c.json({ error: 'not found' }, 404);
+  return c.json({ item: rowToJournal(row) });
+});
+
+app.delete('/api/journal/items/:id', (c) => {
+  const id = c.req.param('id');
+  const ok = journalRepo.remove(id);
+  return c.json({ ok });
+});
+
+app.delete('/api/journal/items', (c) => {
+  journalRepo.clear();
+  return c.json({ ok: true });
+});
+
+/**
+ * Journal extractor: takes a pre-built prompt from the client (the chat
+ * transcript + instructions for JSON-only output) and returns the model's raw
+ * response. The UI parses the JSON itself so it can be liberal about
+ * surrounding prose if the model wraps the JSON in markdown fences.
+ */
+app.post('/api/journal/extract', async (c) => {
+  let body: { prompt?: unknown };
+  try { body = await c.req.json(); } catch { body = {}; }
+  const prompt = typeof body.prompt === 'string' ? body.prompt : '';
+  if (!prompt) return c.json({ error: 'prompt required' }, 400);
+
+  const ac = new AbortController();
+  c.req.raw.signal.addEventListener('abort', () => ac.abort(), { once: true });
+  try {
+    const text = await completeWithClaude(prompt, ac.signal);
+    return c.json({ text });
+  } catch (err) {
+    log.warn({ err }, 'journal extract failed');
+    return c.json({ error: 'extract failed', detail: (err as Error).message }, 500);
+  }
 });
 
 app.get('/api/events', (c) => {

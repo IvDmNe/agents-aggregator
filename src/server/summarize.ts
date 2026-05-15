@@ -16,6 +16,44 @@ export interface SummarizeChunk {
 const CLAUDE_BIN = process.env.CLAUDE_BIN || 'claude';
 const CODEX_BIN = process.env.CODEX_BIN || 'codex';
 
+/**
+ * One-shot prompt → completion via the Claude CLI. Used by the journal
+ * extractor, which needs a single JSON blob, not a streaming summary. Returns
+ * the full stdout once the process exits.
+ */
+export async function completeWithClaude(prompt: string, signal: AbortSignal): Promise<string> {
+  const proc = spawn(
+    CLAUDE_BIN,
+    [
+      '-p',
+      '--tools', '',
+      '--model', 'haiku',
+      '--permission-mode', 'dontAsk',
+      '--no-session-persistence',
+    ],
+    { cwd: os.tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  const onAbort = () => { try { proc.kill('SIGTERM'); } catch { /* ignore */ } };
+  signal.addEventListener('abort', onAbort, { once: true });
+
+  proc.stdin.write(prompt);
+  proc.stdin.end();
+
+  let out = '';
+  let err = '';
+  proc.stdout.on('data', (b: Buffer) => { out += b.toString('utf8'); });
+  proc.stderr.on('data', (b: Buffer) => { err += b.toString('utf8'); });
+  const code: number | null = await new Promise((res) => {
+    proc.on('close', (c) => res(c));
+    proc.on('error', () => res(-1));
+  });
+  signal.removeEventListener('abort', onAbort);
+  if (code !== 0) {
+    throw new Error(err.trim().slice(-500) || `claude exited ${code}`);
+  }
+  return out;
+}
+
 const SYSTEM_PROMPT = [
   'You are summarizing a coding-agent session for a developer reviewing past work.',
   'Do NOT call any tools. Do NOT ask follow-up questions. Just produce the summary as plain markdown.',

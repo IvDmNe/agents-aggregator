@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { composeSessionId, type Session } from '../shared/types';
+import { composeSessionId, type Entry, type Session } from '../shared/types';
 import {
   TWEAK_DEFAULTS,
   monoFont,
@@ -14,6 +14,14 @@ import { useTweaks } from './hooks/useTweaks';
 import { useBreakpoint } from './hooks/useBreakpoint';
 import { useBlurredProjects } from './hooks/useBlurredProjects';
 import { useEntries, useEventStream, useProjects, useSessions, useSources } from './api';
+import { JournalView } from './journal/JournalView';
+import { JournalToast, type ToastState } from './journal/JournalToast';
+import {
+  projectKeyFor,
+  type JournalKind,
+  type JournalProposal,
+} from './journal/types';
+import { useJournal } from './journal/useJournal';
 import { TopBar } from './components/TopBar';
 import { SourcesRail } from './components/SourcesRail';
 import { SessionList } from './components/SessionList';
@@ -35,8 +43,10 @@ const DENSITY_OPTS = ['compact', 'comfy'] as const satisfies readonly Density[];
 const TREATMENT_OPTS = ['chip', 'letter', 'text'] as const satisfies readonly AgentTreatment[];
 
 const HOME_TAB = 'home';
+const JOURNAL_TAB = 'journal';
 const PINNED_KEY = 'aa.pinnedSessionIds';
 const ACTIVE_TAB_KEY = 'aa.activeTab';
+const TOAST_MS = 5000;
 
 function loadPinned(): string[] {
   try {
@@ -109,9 +119,24 @@ export function AppShell() {
   const { data: sessions } = useSessions({ sourceId: sourceFilter, project: projectFilter, q: searchQ || undefined }, refreshKey);
 
   // The live-stream subscription follows whichever session is being shown:
-  // active tab's session if in tab view, else Home's selected session.
-  const streamId = activeTab === HOME_TAB ? activeId : activeTab;
+  // pinned tab's session if in tab view, else Home's selected session.
+  // (No stream needed for the Journal tab — pass undefined.)
+  const streamId = activeTab === HOME_TAB
+    ? activeId
+    : (activeTab === JOURNAL_TAB ? undefined : activeTab);
   const { data: entries, loading: entriesLoading } = useEntries(streamId, streamRefreshKey);
+
+  // ── Journal state ───────────────────────────────────────────────────────
+  const journal = useJournal();
+  const [proposalsBySession, setProposalsBySession] = useState<Record<string, JournalProposal[]>>({});
+  const [journalProjectKey, setJournalProjectKey] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastState | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = window.setTimeout(() => setToast(null), TOAST_MS);
+    return () => window.clearTimeout(id);
+  }, [toast]);
 
   // Cache session metadata for pinned ids so a filtered list doesn't blank out tabs.
   const pinnedMetaRef = useRef<Map<string, TabSession>>(new Map());
@@ -125,7 +150,7 @@ export function AppShell() {
 
   // Default-navigate to the first session once the list loads — but never on
   // narrow screens, where the list itself is the landing view, and never when
-  // we're in a tab view.
+  // we're in a tab view (pinned or journal).
   useEffect(() => {
     if (bp === 'sm') return;
     if (activeTab !== HOME_TAB) return;
@@ -181,6 +206,68 @@ export function AppShell() {
   }, []);
   const goHomeTab = useCallback(() => setActiveTab(HOME_TAB), []);
 
+  // ── Journal handlers ────────────────────────────────────────────────────
+  const jumpToJournal = useCallback((projectKey: string) => {
+    setJournalProjectKey(projectKey);
+    setActiveTab(JOURNAL_TAB);
+  }, []);
+
+  const jumpToSession = useCallback((sessionId: string) => {
+    setActiveTab(HOME_TAB);
+    void navigate({ to: '/session/$id', params: { id: sessionId }, search: (prev) => prev });
+  }, [navigate]);
+
+  const handleCapture = useCallback((entry: Entry, kind: JournalKind, session: Session, overrideText?: string) => {
+    const projectKey = projectKeyFor(session.cwd);
+    const body = (overrideText ?? entry.text ?? '').slice(0, 8000).trim() || '(no text)';
+    const created = journal.add({
+      kind, text: body,
+      projectKey,
+      agent: session.agent,
+      sourceSessionId: session.id,
+      sourceEntryId: entry.id,
+    });
+    // Default to landing on the just-captured project when the user opens
+    // the Journal tab.
+    setJournalProjectKey(projectKey);
+    setToast({
+      kind, projectKey,
+      onView: () => { jumpToJournal(projectKey); setToast(null); },
+      onUndo: () => { journal.remove(created.id); setToast(null); },
+    });
+  }, [journal, jumpToJournal]);
+
+  const setProposalsFor = useCallback((sessionId: string, proposals: JournalProposal[]) => {
+    setProposalsBySession((prev) => ({ ...prev, [sessionId]: proposals }));
+  }, []);
+  const clearProposalsFor = useCallback((sessionId: string) => {
+    setProposalsBySession((prev) => {
+      if (!(sessionId in prev)) return prev;
+      const { [sessionId]: _omit, ...rest } = prev;
+      return rest;
+    });
+  }, []);
+  const acceptProposal = useCallback((sessionId: string, p: JournalProposal) => {
+    journal.add(p);
+    setProposalsBySession((prev) => {
+      const cur = prev[sessionId];
+      if (!cur) return prev;
+      const next = cur.filter((x) => x !== p);
+      if (next.length === 0) {
+        const { [sessionId]: _omit, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [sessionId]: next };
+    });
+    setJournalProjectKey(p.projectKey);
+  }, [journal]);
+  const acceptAllProposals = useCallback((sessionId: string, ps: JournalProposal[]) => {
+    if (ps.length === 0) return;
+    journal.addMany(ps);
+    setJournalProjectKey(ps[0].projectKey);
+    clearProposalsFor(sessionId);
+  }, [journal, clearProposalsFor]);
+
   // Live updates: any session change → bump list; if it matches the stream, bump entries too.
   const onEvent = useCallback((e: { type: string; sourceId?: string; sessionId?: string }) => {
     if (e.type === 'session_updated') {
@@ -193,7 +280,9 @@ export function AppShell() {
 
   // Which session is in focus (right pane on Home, or the tab view)?
   const homeSession = sessions.find((s) => s.id === activeId);
-  const tabSession = activeTab === HOME_TAB ? undefined : sessions.find((s) => s.id === activeTab);
+  const tabSession = activeTab === HOME_TAB || activeTab === JOURNAL_TAB
+    ? undefined
+    : sessions.find((s) => s.id === activeTab);
   const focusedSession = activeTab === HOME_TAB ? homeSession : tabSession;
   const selectedEntry =
     entries.find((e) => e.id === selectedEntryId) || entries[entries.length - 1];
@@ -226,9 +315,9 @@ export function AppShell() {
         if (target) { ev.preventDefault(); setActiveTab(target); }
         return;
       }
-      // ⌘W on a session tab — unpin + back to Home
+      // ⌘W on a session tab — unpin + back to Home. (Journal tab is fixed.)
       if (!ev.shiftKey && !ev.altKey && (ev.key === 'w' || ev.key === 'W')) {
-        if (activeTab !== HOME_TAB) {
+        if (activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB) {
           ev.preventDefault();
           togglePin(activeTab);
         }
@@ -244,7 +333,13 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [pinnedIds, activeTab, togglePin, focusedSession?.id]);
 
-  const inTab = activeTab !== HOME_TAB;
+  const inSessionTab = activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB;
+  const inJournalTab = activeTab === JOURNAL_TAB;
+
+  // Pick which session's proposals to show in the SessionDetail. On Home that's
+  // the focused session; in a pinned tab it's the tab session.
+  const detailSessionId = inSessionTab ? activeTab : (focusedSession?.id ?? null);
+  const detailProposals = detailSessionId ? proposalsBySession[detailSessionId] : undefined;
 
   return (
     <LightboxProvider>
@@ -281,6 +376,8 @@ export function AppShell() {
         input::placeholder { color: ${t.dim2}; }
         button { font-family: ${monoFont}; }
         .blur-text { filter: blur(5px); user-select: none; }
+        .journal-entry-host .journal-capture-row { opacity: 0; }
+        .journal-entry-host:hover .journal-capture-row { opacity: 1; }
       `}</style>
 
       <TopBar
@@ -302,7 +399,16 @@ export function AppShell() {
         loud={tw.liveLoud}
       />
 
-      {inTab ? (
+      {inJournalTab ? (
+        <JournalView
+          theme={tw.theme}
+          journal={journal}
+          projectKey={journalProjectKey}
+          setProjectKey={setJournalProjectKey}
+          sessions={sessions}
+          onJumpToSession={jumpToSession}
+        />
+      ) : inSessionTab ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           <SessionDetail
             theme={tw.theme} treatment={tw.agentTreatment} dense={dense}
@@ -317,6 +423,12 @@ export function AppShell() {
             onTogglePin={() => focusedSession && togglePin(focusedSession.id)}
             onOpenInTab={() => focusedSession && openInTab(focusedSession.id)}
             onBackHome={goHomeTab}
+            onCapture={focusedSession && tw.journalCapture ? (entry, kind, text) => handleCapture(entry, kind, focusedSession, text) : undefined}
+            proposals={detailProposals}
+            onProposals={focusedSession ? (ps) => setProposalsFor(focusedSession.id, ps) : undefined}
+            onAcceptProposal={focusedSession ? (p) => acceptProposal(focusedSession.id, p) : undefined}
+            onAcceptAllProposals={focusedSession ? (ps) => acceptAllProposals(focusedSession.id, ps) : undefined}
+            onDismissProposals={focusedSession ? () => clearProposalsFor(focusedSession.id) : undefined}
           />
         </div>
       ) : (
@@ -365,10 +477,18 @@ export function AppShell() {
               isPinned={focusedSession ? isPinned(focusedSession.id) : false}
               onTogglePin={() => focusedSession && togglePin(focusedSession.id)}
               onOpenInTab={() => focusedSession && openInTab(focusedSession.id)}
+              onCapture={focusedSession && tw.journalCapture ? (entry, kind, text) => handleCapture(entry, kind, focusedSession, text) : undefined}
+              proposals={detailProposals}
+              onProposals={focusedSession ? (ps) => setProposalsFor(focusedSession.id, ps) : undefined}
+              onAcceptProposal={focusedSession ? (p) => acceptProposal(focusedSession.id, p) : undefined}
+              onAcceptAllProposals={focusedSession ? (ps) => acceptAllProposals(focusedSession.id, ps) : undefined}
+              onDismissProposals={focusedSession ? () => clearProposalsFor(focusedSession.id) : undefined}
             />
           )}
         </div>
       )}
+
+      <JournalToast theme={tw.theme} toast={toast} onDismiss={() => setToast(null)} />
 
       <TweaksPanel title="Tweaks" open={tweaksOpen} onClose={() => setTweaksOpen(false)}>
         <TweakSection label="Theme" />
@@ -384,6 +504,23 @@ export function AppShell() {
         <TweakSection label="Live activity" />
         <TweakToggle label="Loud (glow + highlight)" value={tw.liveLoud}
                      onChange={(v) => setTw('liveLoud', v)} />
+
+        <TweakSection label="Journal" />
+        <TweakToggle label="Inline capture buttons" value={tw.journalCapture}
+                     onChange={(v) => setTw('journalCapture', v)} />
+        <div className="twk-row twk-row-h">
+          <div className="twk-lbl"><span>Reset journal</span></div>
+          <button
+            type="button"
+            className="twk-field"
+            style={{ width: 'auto', padding: '0 10px', cursor: 'pointer' }}
+            onClick={() => {
+              if (typeof window === 'undefined' || window.confirm('Clear all journal items? This cannot be undone.')) {
+                journal.reset();
+              }
+            }}
+          >Reset</button>
+        </div>
       </TweaksPanel>
     </div>
     </FilePreviewProvider>

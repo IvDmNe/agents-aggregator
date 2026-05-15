@@ -1,5 +1,7 @@
 import { memo, type CSSProperties, type ReactNode } from 'react';
 import type { Entry, EntryImage, Session } from '../../shared/types';
+import { JournalCaptureButtons } from '../journal/JournalCaptureButtons';
+import type { JournalKind } from '../journal/types';
 import { LivePip } from './AgentChip';
 import { DeferredMount } from './DeferredMount';
 import { PierreDiff } from './PierreDiff';
@@ -27,10 +29,17 @@ interface EntryBlockProps {
   /** Called with the entry id when the row is clicked. Keep this reference
    *  stable (e.g. a `useState` setter) — `EntryBlock` is memoized. */
   onSelect: (id: string) => void;
+  /** When provided, user/assistant entries show hover-revealed
+   *  capture buttons in the byline. */
+  onCapture?: (entryId: string, kind: JournalKind) => void;
 }
 
-function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, readable, onSelect }: EntryBlockProps) {
+function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, readable, onSelect, onCapture }: EntryBlockProps) {
   const handleSelect = () => onSelect(e.id);
+  const isChatBubble = e.role === 'user' || e.role === 'assistant';
+  const captureRow = isChatBubble && onCapture ? (
+    <JournalCaptureButtons theme={theme} onCapture={(k) => onCapture(e.id, k)} compact />
+  ) : null;
   const t = themes[theme];
   const { open: openPreview } = useFilePreview();
   const isUser = e.role === 'user';
@@ -172,7 +181,7 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, re
   if (readable) {
     const byline = isUser ? 'You' : (session.agent.charAt(0).toUpperCase() + session.agent.slice(1));
     return (
-      <div onClick={handleSelect} style={{
+      <div onClick={handleSelect} className="journal-entry-host" data-entry-id={e.id} style={{
         ...baseStyle,
         padding: '18px 4px 22px',
         background: selected ? t.panel : 'transparent',
@@ -192,6 +201,7 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, re
               <LivePip theme={theme} loud={true} size={5} /> streaming
             </span>
           )}
+          {captureRow && <span style={{ marginLeft: 'auto' }}>{captureRow}</span>}
         </div>
         <div style={{ color: t.fg }}>
           {e.text && <Markdown theme={theme} content={e.text} readable />}
@@ -209,7 +219,7 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, re
   }
 
   return (
-    <div onClick={handleSelect} style={{
+    <div onClick={handleSelect} className="journal-entry-host" data-entry-id={e.id} style={{
       ...baseStyle, display: 'flex', gap: 10, padding: '8px',
       background: selected ? t.panel : 'transparent',
       border: `1px solid ${selected ? t.accent : 'transparent'}`,
@@ -222,7 +232,7 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, re
         fontSize: 12, fontWeight: 700, fontFamily: sansFont,
       }}>{isUser ? 'You' : AGENT_GLYPHS[session.agent]}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', gap: 10, fontSize: 12, color: t.dim2, marginBottom: 4 }}>
+        <div style={{ display: 'flex', gap: 10, fontSize: 12, color: t.dim2, marginBottom: 4, alignItems: 'center' }}>
           <span style={{ color: t.fg, fontWeight: 500 }}>
             {isUser ? 'You' : (session.agent.charAt(0).toUpperCase() + session.agent.slice(1))}
           </span>
@@ -232,6 +242,7 @@ function EntryBlockImpl({ entry: e, theme, session, compact, isNew, selected, re
               <LivePip theme={theme} loud={true} size={5} /> streaming
             </span>
           )}
+          {captureRow && <span style={{ marginLeft: 'auto' }}>{captureRow}</span>}
         </div>
         <div style={{ color: t.fg, fontSize: 14, lineHeight: 1.55 }}>
           {e.text && <Markdown theme={theme} content={e.text} />}
