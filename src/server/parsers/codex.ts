@@ -17,8 +17,10 @@ import type { Parser, SessionFile } from './base';
  *       function_call  { name, arguments (JSON string), call_id }
  *       function_call_output { call_id, output }
  *
- * Codex's primary tool is `exec_command` — its file edits happen through
- * `apply_patch` piped to a shell, so they ride on top of exec_command too.
+ * Codex's primary tool is `exec_command`. File edits arrive as
+ * `custom_tool_call` payloads with `name === 'apply_patch'` and an `input`
+ * string in the OpenAI apply_patch envelope format — we parse those into
+ * per-file diff entries so the UI can render them like Claude's Edit/Write.
  */
 
 interface CodexLine {
@@ -143,9 +145,10 @@ export const codexParser: Parser = {
   parseEntries(filePath: string): Entry[] {
     const lines = readJsonl(filePath);
 
-    // First pass: gather exec_command calls and their outputs by call_id so
-    // we can fold them into bash entries on emit.
+    // First pass: gather exec_command + apply_patch calls and their outputs by
+    // call_id so we can fold outputs into the rendered entry.
     const execCalls = new Map<string, FnCall>();
+    const applyPatchCallIds = new Set<string>();
     const fnOutputs = new Map<string, FnOut>();
     lines.forEach((l, i) => {
       if (l.type !== 'response_item') return;
@@ -158,7 +161,15 @@ export const codexParser: Parser = {
             callId: p.call_id, ts: l.timestamp, lineIndex: i,
           });
         }
+      } else if (p.type === 'custom_tool_call' && typeof p.call_id === 'string') {
+        if (p.name === 'apply_patch') applyPatchCallIds.add(p.call_id);
       } else if (p.type === 'function_call_output' && typeof p.call_id === 'string') {
+        fnOutputs.set(p.call_id, {
+          callId: p.call_id,
+          output: typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? ''),
+          ts: l.timestamp,
+        });
+      } else if (p.type === 'custom_tool_call_output' && typeof p.call_id === 'string') {
         fnOutputs.set(p.call_id, {
           callId: p.call_id,
           output: typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? ''),
@@ -237,10 +248,175 @@ export const codexParser: Parser = {
         });
         return;
       }
+
+      if (p.type === 'custom_tool_call') {
+        if (p.name === 'apply_patch') {
+          const input = typeof p.input === 'string' ? p.input : '';
+          const files = parseApplyPatch(input);
+          if (files.length === 0) {
+            // Fall back to a generic toolCall so the entry isn't dropped.
+            out.push({
+              id: baseId, role: 'toolCall', timestamp: ts,
+              tool: 'apply_patch', args: {},
+              preview: input.slice(0, 200),
+            });
+            return;
+          }
+          files.forEach((f, j) => {
+            const eid = files.length === 1 ? baseId : `${baseId}#${j}`;
+            if (f.op === 'add') {
+              out.push({
+                id: eid, role: 'toolCall', timestamp: ts,
+                tool: 'Write',
+                args: { path: f.path, content: f.content ?? '' },
+                preview: f.path,
+              });
+            } else if (f.op === 'update') {
+              const edits = (f.edits ?? []).map((e) => ({
+                old_string: e.oldText, new_string: e.newText,
+              }));
+              out.push({
+                id: eid, role: 'toolCall', timestamp: ts,
+                tool: 'Edit',
+                args: { path: f.path, edits },
+                preview: f.path,
+              });
+            } else {
+              out.push({
+                id: eid, role: 'toolCall', timestamp: ts,
+                tool: 'Delete',
+                args: { path: f.path },
+                preview: `deleted ${f.path}`,
+              });
+            }
+          });
+          return;
+        }
+        const inputStr = typeof p.input === 'string' ? p.input : JSON.stringify(p.input ?? '');
+        out.push({
+          id: baseId, role: 'toolCall', timestamp: ts,
+          tool: typeof p.name === 'string' ? p.name : 'custom_tool',
+          args: {},
+          preview: inputStr.slice(0, 200),
+        });
+        return;
+      }
+
+      if (p.type === 'custom_tool_call_output') {
+        // apply_patch outputs are implicit in the diff entry; suppress.
+        if (applyPatchCallIds.has(p.call_id)) return;
+        const text = typeof p.output === 'string' ? p.output : JSON.stringify(p.output ?? '');
+        const lineCount = text.split('\n').length;
+        out.push({
+          id: baseId, role: 'toolResult', timestamp: ts,
+          ok: true,
+          summary: lineCount > 1 ? `${lineCount} lines` : text.slice(0, 120),
+        });
+        return;
+      }
     });
     return out;
   },
 };
+
+// ── apply_patch parser ────────────────────────────────────────────────────
+//
+// Format (envelope may wrap multiple file ops):
+//   *** Begin Patch
+//   *** Add File: <path>
+//   +<line>...
+//   *** Update File: <path>
+//   *** Move to: <path>   (optional)
+//   @@ <optional context header>
+//    <context line>
+//   -<removed line>
+//   +<added line>
+//   *** Delete File: <path>
+//   *** End Patch
+//
+// Update hunks are separated by `@@`. We turn each hunk into one
+// {oldText, newText} pair so the existing PierreDiff renderer can show it.
+
+interface ApplyPatchFile {
+  path: string;
+  op: 'add' | 'update' | 'delete';
+  content?: string;
+  edits?: Array<{ oldText: string; newText: string }>;
+  moveTo?: string;
+}
+
+function parseApplyPatch(input: string): ApplyPatchFile[] {
+  const lines = input.split('\n');
+  const out: ApplyPatchFile[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const ln = lines[i];
+    let m: RegExpExecArray | null;
+    if ((m = /^\*\*\* Add File: (.+)$/.exec(ln))) {
+      const path = m[1];
+      i++;
+      const body: string[] = [];
+      while (i < lines.length && !lines[i].startsWith('*** ')) {
+        const l = lines[i];
+        body.push(l.startsWith('+') ? l.slice(1) : l);
+        i++;
+      }
+      out.push({ path, op: 'add', content: body.join('\n') });
+      continue;
+    }
+    if ((m = /^\*\*\* Delete File: (.+)$/.exec(ln))) {
+      out.push({ path: m[1], op: 'delete' });
+      i++;
+      continue;
+    }
+    if ((m = /^\*\*\* Update File: (.+)$/.exec(ln))) {
+      const path = m[1];
+      i++;
+      let moveTo: string | undefined;
+      if (i < lines.length) {
+        const m2 = /^\*\*\* Move to: (.+)$/.exec(lines[i]);
+        if (m2) { moveTo = m2[1]; i++; }
+      }
+      const edits: Array<{ oldText: string; newText: string }> = [];
+      let oldBuf: string[] = [];
+      let newBuf: string[] = [];
+      const flush = () => {
+        if (oldBuf.length || newBuf.length) {
+          edits.push({ oldText: oldBuf.join('\n'), newText: newBuf.join('\n') });
+        }
+        oldBuf = []; newBuf = [];
+      };
+      while (i < lines.length && !lines[i].startsWith('*** ')) {
+        const l = lines[i];
+        if (l.startsWith('@@')) {
+          flush();
+          i++;
+          continue;
+        }
+        if (l.startsWith('+')) {
+          newBuf.push(l.slice(1));
+        } else if (l.startsWith('-')) {
+          oldBuf.push(l.slice(1));
+        } else if (l.startsWith(' ')) {
+          const c = l.slice(1);
+          oldBuf.push(c);
+          newBuf.push(c);
+        } else if (l === '') {
+          // Truly empty line (no leading space) — treat as blank context so
+          // we don't desync old/new. Common when patches were re-flowed.
+          oldBuf.push('');
+          newBuf.push('');
+        }
+        i++;
+      }
+      flush();
+      out.push({ path, op: 'update', edits, moveTo });
+      continue;
+    }
+    i++;
+  }
+  return out;
+}
 
 function walk(dir: string, visit: (file: string) => void): void {
   let entries: fs.Dirent[];
