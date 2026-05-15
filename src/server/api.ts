@@ -10,7 +10,7 @@ import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
 import { resolveTargetForSession, sendInput } from './tmux';
 import { distill } from './distill';
-import { completeWithClaude, summarize, type Backend } from './summarize';
+import { complete, summarize, type Backend } from './summarize';
 import { log } from './logger';
 import type { AgentType, JournalItem, JournalKind } from '../shared/types';
 
@@ -383,18 +383,19 @@ app.delete('/api/journal/items', (c) => {
  * surrounding prose if the model wraps the JSON in markdown fences.
  */
 app.post('/api/journal/extract', async (c) => {
-  let body: { prompt?: unknown };
+  let body: { prompt?: unknown; backend?: unknown };
   try { body = await c.req.json(); } catch { body = {}; }
   const prompt = typeof body.prompt === 'string' ? body.prompt : '';
   if (!prompt) return c.json({ error: 'prompt required' }, 400);
+  const backend: Backend = body.backend === 'codex' ? 'codex' : 'claude';
 
   const ac = new AbortController();
   c.req.raw.signal.addEventListener('abort', () => ac.abort(), { once: true });
   try {
-    const text = await completeWithClaude(prompt, ac.signal);
-    return c.json({ text });
+    const text = await complete(backend, prompt, ac.signal);
+    return c.json({ backend, text });
   } catch (err) {
-    log.warn({ err }, 'journal extract failed');
+    log.warn({ err, backend }, 'journal extract failed');
     return c.json({ error: 'extract failed', detail: (err as Error).message }, 500);
   }
 });

@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import type { Entry, Session } from '../../shared/types';
 import { extractJournal } from '../api';
-import { monoFont, themes, type ThemeMode } from '../theme';
+import {
+  backendModelLabel,
+  monoFont, themes,
+  type SummarizeBackend, type ThemeMode,
+} from '../theme';
 import { projectKeyFor, projectLabel, type JournalProposal } from './types';
 
 interface SummarizeButtonProps {
@@ -9,9 +13,11 @@ interface SummarizeButtonProps {
   session: Session;
   entries: Entry[];
   onProposals: (proposals: JournalProposal[]) => void;
+  /** Which CLI to shell out to (see Tweaks → Summarization). Defaults to claude. */
+  backend?: SummarizeBackend;
 }
 
-export function SummarizeButton({ theme, session, entries, onProposals }: SummarizeButtonProps) {
+export function SummarizeButton({ theme, session, entries, onProposals, backend = 'claude' }: SummarizeButtonProps) {
   const t = themes[theme];
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +53,7 @@ Rules:
 - "note" = freeform observation that isn't either.
 - 1-2 sentences per item. No more than 4 items total. Be specific to this transcript.`;
 
-      const raw = await extractJournal(prompt);
+      const raw = await extractJournal(prompt, backend);
       // Be liberal in what we accept — pull out the first {...} block.
       const match = raw.match(/\{[\s\S]*\}/);
       const parsed = JSON.parse(match ? match[0] : raw) as {
@@ -87,18 +93,25 @@ Rules:
     }
   };
 
+  const model = backendModelLabel(backend);
   return (
-    <button onClick={run} disabled={loading} style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      padding: '4px 8px', borderRadius: 4,
-      background: t.panel, border: `1px solid ${t.border}`,
-      color: loading ? t.dim2 : t.fg2,
-      fontFamily: monoFont, fontSize: 11,
-      cursor: loading ? 'default' : 'pointer',
-      whiteSpace: 'nowrap',
-    }}>
+    <button
+      onClick={run}
+      disabled={loading}
+      title={`Summarize last 20 entries with ${model} (change in Tweaks → Summarization)`}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 8px', borderRadius: 4,
+        background: t.panel, border: `1px solid ${t.border}`,
+        color: loading ? t.dim2 : t.fg2,
+        fontFamily: monoFont, fontSize: 11,
+        cursor: loading ? 'default' : 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
       <span style={{ color: t.amber, fontSize: 10 }}>◆</span>
-      {loading ? 'summarizing…' : 'summarize → journal'}
+      {loading ? `summarizing via ${backend}…` : 'summarize → journal'}
+      <span style={{ color: t.dim2, fontSize: 10 }}>· {model}</span>
     </button>
   );
 }

@@ -3,11 +3,13 @@ import { useMatch, useNavigate } from '@tanstack/react-router';
 import { composeSessionId, type Entry, type Session } from '../shared/types';
 import {
   TWEAK_DEFAULTS,
+  backendModelLabel,
   monoFont,
   sansFont,
   themes,
   type AgentTreatment,
   type Density,
+  type SummarizeBackend,
   type ThemeMode,
 } from './theme';
 import { useTweaks } from './hooks/useTweaks';
@@ -41,6 +43,7 @@ import { indexRoute, sessionRoute } from './router';
 const THEME_OPTS = ['dark', 'light'] as const satisfies readonly ThemeMode[];
 const DENSITY_OPTS = ['compact', 'comfy'] as const satisfies readonly Density[];
 const TREATMENT_OPTS = ['chip', 'letter', 'text'] as const satisfies readonly AgentTreatment[];
+const BACKEND_OPTS = ['claude', 'codex'] as const satisfies readonly SummarizeBackend[];
 
 const HOME_TAB = 'home';
 const JOURNAL_TAB = 'journal';
@@ -429,6 +432,7 @@ export function AppShell() {
             onAcceptProposal={focusedSession ? (p) => acceptProposal(focusedSession.id, p) : undefined}
             onAcceptAllProposals={focusedSession ? (ps) => acceptAllProposals(focusedSession.id, ps) : undefined}
             onDismissProposals={focusedSession ? () => clearProposalsFor(focusedSession.id) : undefined}
+            summarizeBackend={tw.summarizeBackend}
           />
         </div>
       ) : (
@@ -483,6 +487,7 @@ export function AppShell() {
               onAcceptProposal={focusedSession ? (p) => acceptProposal(focusedSession.id, p) : undefined}
               onAcceptAllProposals={focusedSession ? (ps) => acceptAllProposals(focusedSession.id, ps) : undefined}
               onDismissProposals={focusedSession ? () => clearProposalsFor(focusedSession.id) : undefined}
+              summarizeBackend={tw.summarizeBackend}
             />
           )}
         </div>
@@ -504,6 +509,17 @@ export function AppShell() {
         <TweakSection label="Live activity" />
         <TweakToggle label="Loud (glow + highlight)" value={tw.liveLoud}
                      onChange={(v) => setTw('liveLoud', v)} />
+
+        <TweakSection label="Summarization" />
+        <TweakRadio label="Backend" value={tw.summarizeBackend} options={BACKEND_OPTS}
+                    onChange={(v) => setTw('summarizeBackend', v)} />
+        <div className="twk-row twk-row-h">
+          <div className="twk-lbl"><span style={{ opacity: 0.7 }}>Model</span></div>
+          <span style={{
+            fontFamily: monoFont, fontSize: 11,
+            color: tw.theme === 'dark' ? 'rgba(230,232,238,0.55)' : 'rgba(41,38,27,0.55)',
+          }}>{backendModelLabel(tw.summarizeBackend)}</span>
+        </div>
 
         <TweakSection label="Journal" />
         <TweakToggle label="Inline capture buttons" value={tw.journalCapture}

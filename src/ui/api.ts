@@ -156,11 +156,15 @@ export function useSummaryStatus(sessionId: string | undefined, refreshKey: numb
   return { data, loading };
 }
 
-export async function extractJournal(prompt: string, signal?: AbortSignal): Promise<string> {
+export async function extractJournal(
+  prompt: string,
+  backend: 'claude' | 'codex' = 'claude',
+  signal?: AbortSignal,
+): Promise<string> {
   const r = await fetch('/api/journal/extract', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, backend }),
     signal,
   });
   if (!r.ok) {

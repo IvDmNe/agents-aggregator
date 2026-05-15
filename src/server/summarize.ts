@@ -54,6 +54,59 @@ export async function completeWithClaude(prompt: string, signal: AbortSignal): P
   return out;
 }
 
+/**
+ * Codex variant of {@link completeWithClaude}. Codex's stdout has chrome we
+ * don't want, so we route the clean answer through `--output-last-message`
+ * and read the file once the process exits.
+ */
+export async function completeWithCodex(prompt: string, signal: AbortSignal): Promise<string> {
+  const outFile = path.join(os.tmpdir(), `agg-codex-${randomUUID()}.txt`);
+  const proc = spawn(
+    CODEX_BIN,
+    [
+      'exec',
+      '--sandbox', 'read-only',
+      '--skip-git-repo-check',
+      '--ephemeral',
+      '--output-last-message', outFile,
+      '-',
+    ],
+    { cwd: os.tmpdir(), stdio: ['pipe', 'pipe', 'pipe'] },
+  );
+  const onAbort = () => { try { proc.kill('SIGTERM'); } catch { /* ignore */ } };
+  signal.addEventListener('abort', onAbort, { once: true });
+
+  proc.stdin.write(prompt);
+  proc.stdin.end();
+
+  let err = '';
+  // Drain stdout so the pipe doesn't fill; we don't use its content.
+  proc.stdout.on('data', () => { /* discard */ });
+  proc.stderr.on('data', (b: Buffer) => { err += b.toString('utf8'); });
+  const code: number | null = await new Promise((res) => {
+    proc.on('close', (c) => res(c));
+    proc.on('error', () => res(-1));
+  });
+  signal.removeEventListener('abort', onAbort);
+
+  if (code !== 0) {
+    fs.unlink(outFile).catch(() => { /* ignore */ });
+    throw new Error(err.trim().slice(-500) || `codex exited ${code}`);
+  }
+  try {
+    return await fs.readFile(outFile, 'utf8');
+  } finally {
+    fs.unlink(outFile).catch(() => { /* ignore */ });
+  }
+}
+
+/** Dispatch to the right one-shot completer for the chosen backend. */
+export function complete(backend: Backend, prompt: string, signal: AbortSignal): Promise<string> {
+  return backend === 'codex'
+    ? completeWithCodex(prompt, signal)
+    : completeWithClaude(prompt, signal);
+}
+
 const SYSTEM_PROMPT = [
   'You are summarizing a coding-agent session for a developer reviewing past work.',
   'Do NOT call any tools. Do NOT ask follow-up questions. Just produce the summary as plain markdown.',

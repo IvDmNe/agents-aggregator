@@ -13,7 +13,7 @@ import { PinGlyph } from './PinGlyph';
 import { SummaryPanel } from './SummaryPanel';
 import {
   monoFont, themes,
-  type AgentTreatment, type Theme, type ThemeMode,
+  type AgentTreatment, type SummarizeBackend, type Theme, type ThemeMode,
 } from '../theme';
 
 type ViewMode = 'chat' | 'reader';
@@ -49,12 +49,15 @@ interface SessionDetailProps {
   onAcceptProposal?: (p: JournalProposal) => void;
   onAcceptAllProposals?: (ps: JournalProposal[]) => void;
   onDismissProposals?: () => void;
+  /** Backend to use for the summarize→journal extractor. */
+  summarizeBackend?: SummarizeBackend;
 }
 
 export function SessionDetail({
   theme, treatment, dense, loud, session, sources, entries, selectedEntryId, setSelectedEntryId, loading, onBack, blurred,
   inTab, isPinned, onTogglePin, onOpenInTab, onBackHome,
   onCapture, proposals, onProposals, onAcceptProposal, onAcceptAllProposals, onDismissProposals,
+  summarizeBackend,
 }: SessionDetailProps) {
   const t = themes[theme];
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -140,6 +143,7 @@ export function SessionDetail({
                 <SummarizeButton
                   theme={theme} session={session}
                   entries={entries} onProposals={onProposals}
+                  backend={summarizeBackend}
                 />
               )}
               <button style={headerBtnStyle(t)}>fork</button>
