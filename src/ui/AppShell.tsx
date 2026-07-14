@@ -31,6 +31,8 @@ import { SessionDetail } from './components/SessionDetail';
 import { TabBar, type TabSession } from './components/TabBar';
 import { BoardView } from './components/BoardView';
 import { LauncherModal } from './components/LauncherModal';
+import { PendingChat } from './components/PendingChat';
+import { findLaunchedSession, type PendingLaunch } from '../shared/launch';
 import { LightboxProvider } from './components/Lightbox';
 import { FilePreviewProvider } from './components/FilePreview';
 import {
@@ -101,6 +103,7 @@ export function AppShell() {
   const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
   const [tweaksOpen, setTweaksOpen] = useState<boolean>(false);
   const [launcherOpen, setLauncherOpen] = useState<boolean>(false);
+  const [pendingLaunch, setPendingLaunch] = useState<PendingLaunch | null>(null);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [streamRefreshKey, setStreamRefreshKey] = useState<number>(0);
   const [searchInput, setSearchInput] = useState<string>(searchQ);
@@ -162,6 +165,7 @@ export function AppShell() {
   useEffect(() => {
     if (bp === 'sm') return;
     if (activeTab !== HOME_TAB) return;
+    if (pendingLaunch) return;
     if (!activeId && sessions.length > 0) {
       void navigate({
         to: '/session/$id',
@@ -170,7 +174,19 @@ export function AppShell() {
         replace: true,
       });
     }
-  }, [activeId, sessions, navigate, bp, activeTab]);
+  }, [activeId, sessions, navigate, bp, activeTab, pendingLaunch]);
+
+  // Once a just-launched agent writes its session, swap the pending compose
+  // view for the real transcript.
+  useEffect(() => {
+    if (!pendingLaunch) return;
+    const id = findLaunchedSession(sessions, pendingLaunch);
+    if (id) {
+      setPendingLaunch(null);
+      setActiveTab(HOME_TAB);
+      void navigate({ to: '/session/$id', params: { id }, search: (prev) => prev, replace: true });
+    }
+  }, [pendingLaunch, sessions, navigate]);
 
   const goToList = useCallback(() => {
     void navigate({ to: '/', search: (prev) => prev, replace: true });
@@ -420,7 +436,15 @@ export function AppShell() {
         loud={tw.liveLoud}
       />
 
-      {inBoardTab ? (
+      {pendingLaunch ? (
+        <PendingChat
+          theme={tw.theme}
+          agent={pendingLaunch.agent}
+          cwd={pendingLaunch.cwd}
+          session={pendingLaunch.session}
+          onDismiss={() => setPendingLaunch(null)}
+        />
+      ) : inBoardTab ? (
         <BoardView theme={tw.theme} onOpenSession={jumpToSession} />
       ) : inJournalTab ? (
         <JournalView
@@ -522,10 +546,12 @@ export function AppShell() {
           theme={tw.theme}
           projectCwds={projects.map((p) => p.cwd)}
           onClose={() => setLauncherOpen(false)}
-          onLaunched={() => {
+          onLaunched={(result) => {
             setLauncherOpen(false);
+            setPendingLaunch({ agent: result.agent, cwd: result.dir, session: result.session, since: Date.now() });
+            setActiveTab(HOME_TAB);
             setRefreshKey((k) => k + 1);
-            setActiveTab(BOARD_TAB);
+            void navigate({ to: '/', search: (prev) => prev, replace: true });
           }}
         />
       )}

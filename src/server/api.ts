@@ -64,6 +64,36 @@ app.get('/api/branches', (c) => {
 
 const LAUNCH_AGENTS: AgentType[] = ['claude', 'codex', 'pi', 'opencode'];
 
+// Send input to a launched agent's tmux pane by (agent, cwd) — used to deliver
+// the first message before any session transcript exists.
+app.post('/api/pane/input', async (c) => {
+  let body: { agent?: unknown; cwd?: unknown; text?: unknown };
+  try { body = await c.req.json(); } catch { body = {}; }
+  const agent = body.agent;
+  const cwd = typeof body.cwd === 'string' ? body.cwd : '';
+  const text = typeof body.text === 'string' ? body.text : '';
+  if (typeof agent !== 'string' || !LAUNCH_AGENTS.includes(agent as AgentType)) {
+    return c.json({ error: 'invalid agent' }, 400);
+  }
+  if (!cwd) return c.json({ error: 'cwd required' }, 400);
+  if (text.length === 0) return c.json({ error: 'text required' }, 400);
+
+  const resolved = resolveTargetForSession({ agent: agent as AgentType, cwd: path.resolve(expandHome(cwd)) });
+  if (!resolved) {
+    return c.json({
+      error: 'no matching tmux pane',
+      detail: 'No tmux pane found running this agent with a matching cwd.',
+    }, 409);
+  }
+  try {
+    await sendInput(resolved.target, text);
+  } catch (e) {
+    log.error({ err: e, target: resolved.target }, 'pane send-keys failed');
+    return c.json({ error: 'send failed', detail: (e as Error).message }, 500);
+  }
+  return c.json({ ok: true, target: resolved.target });
+});
+
 app.post('/api/launch', async (c) => {
   let body: { agent?: unknown; dir?: unknown; branch?: unknown };
   try { body = await c.req.json(); } catch { body = {}; }
@@ -76,7 +106,7 @@ app.post('/api/launch', async (c) => {
   if (!dir) return c.json({ error: 'dir required' }, 400);
   try {
     const result = launchAgent({ agent: agent as AgentType, dir: path.resolve(expandHome(dir)), branch });
-    return c.json({ ok: true, ...result });
+    return c.json({ ok: true, agent, ...result });
   } catch (e) {
     if (e instanceof LaunchError) {
       const status = e.code === 'duplicate' ? 409 : 400;

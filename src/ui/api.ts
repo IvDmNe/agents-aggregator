@@ -228,7 +228,7 @@ export async function fetchBranches(dir: string, signal?: AbortSignal): Promise<
   return fetchJson<RepoBranches>(`/api/branches?dir=${encodeURIComponent(dir)}`, signal);
 }
 
-export interface LaunchResult { session: string; dir: string; }
+export interface LaunchResult { session: string; dir: string; agent: string; }
 
 export async function launchSession(req: { agent: string; dir: string; branch?: string }): Promise<LaunchResult> {
   const r = await fetch('/api/launch', {
@@ -242,6 +242,19 @@ export async function launchSession(req: { agent: string; dir: string; branch?: 
     throw new Error(detail || `${r.status} ${r.statusText}`);
   }
   return (await r.json()) as LaunchResult;
+}
+
+export async function sendPaneInput(req: { agent: string; cwd: string; text: string }): Promise<void> {
+  const r = await fetch('/api/pane/input', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) {
+    let detail = '';
+    try { const j = await r.json() as { error?: string; detail?: string }; detail = j.detail || j.error || ''; } catch { /* ignore */ }
+    throw new Error(detail || `${r.status} ${r.statusText}`);
+  }
 }
 
 interface ServerEvent {
