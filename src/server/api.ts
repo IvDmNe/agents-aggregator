@@ -8,7 +8,8 @@ import { Readable } from 'node:stream';
 import { journalRepo, sessionsRepo, sourcesRepo, summariesRepo, type JournalItemRow } from './db';
 import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
-import { paneSignals, resolveTargetForSession, sendInput } from './tmux';
+import { paneSignals, resolveTargetForSession, sendInput, listRepoBranches, launchAgent, LaunchError } from './tmux';
+import { expandHome } from './paths';
 import { distill } from './distill';
 import { buildBoard, parseWindowH } from './board';
 import { complete, summarize, type Backend } from './summarize';
@@ -52,6 +53,38 @@ app.get('/api/board', (c) => {
     approval.has(`${agent} ${path.resolve(cwd)}`);
   const entries = buildBoard(sessions, isAlive, isAwaitingApproval, Date.now(), windowH);
   return c.json({ entries });
+});
+
+app.get('/api/branches', (c) => {
+  const url = new URL(c.req.url);
+  const dir = url.searchParams.get('dir');
+  if (!dir) return c.json({ error: 'dir required' }, 400);
+  return c.json(listRepoBranches(path.resolve(expandHome(dir))));
+});
+
+const LAUNCH_AGENTS: AgentType[] = ['claude', 'codex', 'pi', 'opencode'];
+
+app.post('/api/launch', async (c) => {
+  let body: { agent?: unknown; dir?: unknown; branch?: unknown };
+  try { body = await c.req.json(); } catch { body = {}; }
+  const agent = body.agent;
+  const dir = typeof body.dir === 'string' ? body.dir.trim() : '';
+  const branch = typeof body.branch === 'string' ? body.branch.trim() : undefined;
+  if (typeof agent !== 'string' || !LAUNCH_AGENTS.includes(agent as AgentType)) {
+    return c.json({ error: 'invalid agent' }, 400);
+  }
+  if (!dir) return c.json({ error: 'dir required' }, 400);
+  try {
+    const result = launchAgent({ agent: agent as AgentType, dir: path.resolve(expandHome(dir)), branch });
+    return c.json({ ok: true, ...result });
+  } catch (e) {
+    if (e instanceof LaunchError) {
+      const status = e.code === 'duplicate' ? 409 : 400;
+      return c.json({ error: e.code, detail: e.message }, status);
+    }
+    log.error({ err: e }, 'launch failed');
+    return c.json({ error: 'launch_failed', detail: (e as Error).message }, 500);
+  }
 });
 
 app.get('/api/projects', (c) => {

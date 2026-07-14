@@ -218,6 +218,32 @@ export async function sendSessionInput(sessionId: string, text: string): Promise
   }
 }
 
+export interface RepoBranches {
+  isRepo: boolean;
+  current: string | null;
+  branches: string[];
+}
+
+export async function fetchBranches(dir: string, signal?: AbortSignal): Promise<RepoBranches> {
+  return fetchJson<RepoBranches>(`/api/branches?dir=${encodeURIComponent(dir)}`, signal);
+}
+
+export interface LaunchResult { session: string; dir: string; }
+
+export async function launchSession(req: { agent: string; dir: string; branch?: string }): Promise<LaunchResult> {
+  const r = await fetch('/api/launch', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) {
+    let detail = '';
+    try { const j = await r.json() as { error?: string; detail?: string }; detail = j.detail || j.error || ''; } catch { /* ignore */ }
+    throw new Error(detail || `${r.status} ${r.statusText}`);
+  }
+  return (await r.json()) as LaunchResult;
+}
+
 interface ServerEvent {
   type: string;
   sourceId?: string;

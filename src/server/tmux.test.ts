@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { looksLikeApprovalPrompt } from './tmux';
+import {
+  looksLikeApprovalPrompt,
+  worktreePath,
+  agentSessionName,
+  uniqueName,
+  mergeBranchList,
+} from './tmux';
 
 // A realistic Claude Code permission dialog as captured by `tmux capture-pane -p`.
 const APPROVAL_PROMPT = `
@@ -58,4 +64,28 @@ test('idle waiting-for-input output is not an approval prompt', () => {
 
 test('empty capture is not an approval prompt', () => {
   assert.equal(looksLikeApprovalPrompt(''), false);
+});
+
+test('worktreePath appends a slash-sanitized branch to the repo root', () => {
+  assert.equal(worktreePath('/home/u/mpl', 'feature-x'), '/home/u/mpl-feature-x');
+  assert.equal(worktreePath('/home/u/mpl', 'user/thing'), '/home/u/mpl-user-thing');
+});
+
+test('agentSessionName is prefixed, sanitized, and tmux-safe', () => {
+  assert.equal(agentSessionName('claude', 'mpl'), 'agt-claude-mpl');
+  // dots/spaces/colons collapse to single dashes, no leading/trailing dash
+  assert.equal(agentSessionName('codex', 'my proj.v2'), 'agt-codex-my-proj-v2');
+});
+
+test('uniqueName returns base when free, else -2, -3…', () => {
+  assert.equal(uniqueName('agt-claude-mpl', () => false), 'agt-claude-mpl');
+  const taken = new Set(['agt-claude-mpl', 'agt-claude-mpl-2']);
+  assert.equal(uniqueName('agt-claude-mpl', (n) => taken.has(n)), 'agt-claude-mpl-3');
+});
+
+test('mergeBranchList: locals first, remotes only if no local counterpart, unique', () => {
+  assert.deepEqual(
+    mergeBranchList(['main', 'feat'], ['main', 'feat', 'release', 'release']),
+    ['main', 'feat', 'release'],
+  );
 });

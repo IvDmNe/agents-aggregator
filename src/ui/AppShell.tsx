@@ -30,6 +30,7 @@ import { SessionList } from './components/SessionList';
 import { SessionDetail } from './components/SessionDetail';
 import { TabBar, type TabSession } from './components/TabBar';
 import { BoardView } from './components/BoardView';
+import { LauncherModal } from './components/LauncherModal';
 import { LightboxProvider } from './components/Lightbox';
 import { FilePreviewProvider } from './components/FilePreview';
 import {
@@ -99,6 +100,7 @@ export function AppShell() {
 
   const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
   const [tweaksOpen, setTweaksOpen] = useState<boolean>(false);
+  const [launcherOpen, setLauncherOpen] = useState<boolean>(false);
   const [refreshKey, setRefreshKey] = useState<number>(0);
   const [streamRefreshKey, setStreamRefreshKey] = useState<number>(0);
   const [searchInput, setSearchInput] = useState<string>(searchQ);
@@ -405,6 +407,7 @@ export function AppShell() {
         setSearch={setSearchInput}
         onToggleTheme={() => setTw('theme', tw.theme === 'dark' ? 'light' : 'dark')}
         onToggleTweaks={() => setTweaksOpen((v) => !v)}
+        onNewSession={() => setLauncherOpen(true)}
         compact={bp === 'sm'}
       />
 
@@ -512,6 +515,19 @@ export function AppShell() {
             />
           )}
         </div>
+      )}
+
+      {launcherOpen && (
+        <LauncherModal
+          theme={tw.theme}
+          projectCwds={projects.map((p) => p.cwd)}
+          onClose={() => setLauncherOpen(false)}
+          onLaunched={() => {
+            setLauncherOpen(false);
+            setRefreshKey((k) => k + 1);
+            setActiveTab(BOARD_TAB);
+          }}
+        />
       )}
 
       <JournalToast theme={tw.theme} toast={toast} onDismiss={() => setToast(null)} />

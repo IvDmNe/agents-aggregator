@@ -8,10 +8,11 @@ interface TopBarProps {
   setSearch: (s: string) => void;
   onToggleTheme: () => void;
   onToggleTweaks: () => void;
+  onNewSession: () => void;
   compact?: boolean;
 }
 
-export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onToggleTweaks, compact = false }: TopBarProps) {
+export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onToggleTweaks, onNewSession, compact = false }: TopBarProps) {
   const t = themes[theme];
   const btnStyle = {
     background: 'transparent', border: `1px solid ${t.border}`, borderRadius: 6,
@@ -94,6 +95,15 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
             {liveCount}
           </span>
         )}
+
+        <button
+          onClick={onNewSession}
+          style={{ ...btnStyle, fontWeight: 600, padding: '5px 10px' }}
+          aria-label="New agent session"
+          title="New agent session"
+        >
+          {compact ? '+' : '+ New'}
+        </button>
 
         <button onClick={onToggleTweaks} style={btnStyle} aria-label="Tweaks" title="Tweaks">
           {compact ? '⚙' : 'Tweaks'}
