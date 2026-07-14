@@ -153,3 +153,22 @@ export async function sendInput(target: string, text: string): Promise<void> {
   }
   await execFileP('tmux', ['send-keys', '-t', target, 'Enter']);
 }
+
+/**
+ * Set of `${agent}\0${resolvedCwd}` keys for every tmux pane currently running
+ * a known agent. One `listPanes()` + process-tree walk; used by the board to
+ * decide `paneAlive` for all sessions in a single pass.
+ */
+export function livePaneKeys(): Set<string> {
+  const keys = new Set<string>();
+  const agents = Object.keys(AGENT_BINARIES) as AgentType[];
+  for (const pane of listPanes()) {
+    for (const agent of agents) {
+      const pid = findDescendantMatching(pane.panePid, AGENT_BINARIES[agent]);
+      if (!pid) continue;
+      const cwd = readProcCwd(pid);
+      if (cwd) keys.add(`${agent} ${path.resolve(cwd)}`);
+    }
+  }
+  return keys;
+}

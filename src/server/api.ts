@@ -8,8 +8,9 @@ import { Readable } from 'node:stream';
 import { journalRepo, sessionsRepo, sourcesRepo, summariesRepo, type JournalItemRow } from './db';
 import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
-import { resolveTargetForSession, sendInput } from './tmux';
+import { livePaneKeys, resolveTargetForSession, sendInput } from './tmux';
 import { distill } from './distill';
+import { buildBoard } from './board';
 import { complete, summarize, type Backend } from './summarize';
 import { log } from './logger';
 import type { AgentType, JournalItem, JournalKind } from '../shared/types';
@@ -37,6 +38,18 @@ app.get('/api/sessions', (c) => {
   // Strip filePath from the wire — keep it for entry endpoints only.
   const sessions = rows.map(({ filePath: _fp, ...rest }) => rest);
   return c.json({ sessions });
+});
+
+app.get('/api/board', (c) => {
+  const url = new URL(c.req.url);
+  const windowH = Number(url.searchParams.get('windowH') ?? '6') || 6;
+  const rows = sessionsRepo.list();
+  const sessions = rows.map(({ filePath: _fp, ...rest }) => rest);
+  const keys = livePaneKeys();
+  const isAlive = (agent: string, cwd: string) =>
+    keys.has(`${agent} ${path.resolve(cwd)}`);
+  const entries = buildBoard(sessions, isAlive, Date.now(), windowH);
+  return c.json({ entries });
 });
 
 app.get('/api/projects', (c) => {
