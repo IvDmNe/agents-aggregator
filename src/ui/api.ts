@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { splitSessionId, type Entry, type Session, type Source } from '../shared/types';
+import { splitSessionId, type BoardEntry, type Entry, type Session, type Source } from '../shared/types';
 
 async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const r = await fetch(url, { signal });
@@ -12,6 +12,7 @@ export interface SessionsResponse { sessions: Session[]; }
 export interface EntriesResponse { entries: Entry[]; }
 export interface Project { cwd: string; count: number; latestAt: string; }
 export interface ProjectsResponse { projects: Project[]; }
+export interface BoardResponse { entries: BoardEntry[]; }
 
 export function useSources(filter: { project?: string | null; q?: string }, refreshKey: number): { data: Source[]; error: Error | null } {
   const [data, setData] = useState<Source[]>([]);
@@ -45,6 +46,29 @@ export function useSessions(filter: { sourceId?: string | null; q?: string; proj
       .catch((e) => { if (e.name !== 'AbortError') setError(e as Error); });
     return () => ac.abort();
   }, [filter.sourceId, filter.project, filter.q, refreshKey]);
+  return { data, error };
+}
+
+/**
+ * Fetch the Kanban board and keep it fresh. Polls every 5s because a
+ * Running→Needs-Input transition is driven by the *absence* of new activity,
+ * which the SSE stream cannot push. `refreshKey` lets callers force an
+ * immediate refetch (e.g. on an SSE event).
+ */
+export function useBoard(windowH: number, refreshKey: number): { data: BoardEntry[]; error: Error | null } {
+  const [data, setData] = useState<BoardEntry[]>([]);
+  const [error, setError] = useState<Error | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetchJson<BoardResponse>(`/api/board?windowH=${windowH}`)
+        .then((r) => { if (!cancelled) setData(r.entries); })
+        .catch((e) => { if (!cancelled && (e as Error).name !== 'AbortError') setError(e as Error); });
+    };
+    load();
+    const iv = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(iv); };
+  }, [windowH, refreshKey]);
   return { data, error };
 }
 
