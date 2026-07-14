@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
 import { useBoard, useEventStream } from '../api';
 import { themes, type ThemeMode } from '../theme';
 import type { BoardColumn } from '../../shared/types';
@@ -19,15 +18,7 @@ const WINDOWS: { label: string; hours: number }[] = [
   { label: 'Live-only', hours: 0 },
 ];
 
-function useThemeMode(): ThemeMode {
-  if (typeof window !== 'undefined' && window.matchMedia) {
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  }
-  return 'dark';
-}
-
-export function BoardView() {
-  const theme = useThemeMode();
+export function BoardView({ theme, onOpenSession }: { theme: ThemeMode; onOpenSession: (id: string) => void }) {
   const t = themes[theme];
   const [windowH, setWindowH] = useState(6);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -37,11 +28,9 @@ export function BoardView() {
   const byColumn = (col: BoardColumn) => data.filter((e) => e.column === col);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: t.bg, color: t.fg }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px',
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: t.bg, color: t.fg }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px',
                     borderBottom: `1px solid ${t.border}` }}>
-        <Link to="/" style={{ color: t.fg2, textDecoration: 'none', fontSize: 13 }}>← Home</Link>
-        <span style={{ fontWeight: 600, fontSize: 14 }}>Board</span>
         <div style={{ flex: 1 }} />
         {WINDOWS.map((w) => (
           <button key={w.label} onClick={() => setWindowH(w.hours)}
@@ -66,7 +55,7 @@ export function BoardView() {
                 <span style={{ color: t.dim }}>{items.length}</span>
               </div>
               <div style={{ flex: 1, overflowY: 'auto' }}>
-                {items.map((e) => <BoardCard key={e.session.id} entry={e} theme={theme} />)}
+                {items.map((e) => <BoardCard key={e.session.id} entry={e} theme={theme} onOpen={onOpenSession} />)}
               </div>
             </div>
           );

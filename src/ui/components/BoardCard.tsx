@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
 import { sendSessionInput } from '../api';
 import { themes, type ThemeMode } from '../theme';
 import type { BoardEntry } from '../../shared/types';
@@ -10,7 +9,7 @@ function basename(p: string): string {
   return parts[parts.length - 1] || p;
 }
 
-export function BoardCard({ entry, theme }: { entry: BoardEntry; theme: ThemeMode }) {
+export function BoardCard({ entry, theme, onOpen }: { entry: BoardEntry; theme: ThemeMode; onOpen: (id: string) => void }) {
   const t = themes[theme];
   const s = entry.session;
   const canSend = entry.column === 'needs-input' || entry.column === 'needs-approval';
@@ -31,7 +30,7 @@ export function BoardCard({ entry, theme }: { entry: BoardEntry; theme: ThemeMod
       border: `1px solid ${t.border}`, borderRadius: 8, background: t.panel,
       padding: 10, marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6,
     }}>
-      <Link to="/session/$id" params={{ id: s.id }} style={{ textDecoration: 'none', color: t.fg }}>
+      <div onClick={() => onOpen(s.id)} style={{ cursor: 'pointer', color: t.fg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
           {entry.live && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#5EE0B4' }} />}
           <span style={{ color: t.fg2 }}>{s.agent}</span>
@@ -45,7 +44,7 @@ export function BoardCard({ entry, theme }: { entry: BoardEntry; theme: ThemeMod
             {entry.lastLine}
           </div>
         )}
-      </Link>
+      </div>
       {canSend && (
         <div style={{ display: 'flex', gap: 4 }}>
           <input

@@ -29,6 +29,7 @@ import { SourcesRail } from './components/SourcesRail';
 import { SessionList } from './components/SessionList';
 import { SessionDetail } from './components/SessionDetail';
 import { TabBar, type TabSession } from './components/TabBar';
+import { BoardView } from './components/BoardView';
 import { LightboxProvider } from './components/Lightbox';
 import { FilePreviewProvider } from './components/FilePreview';
 import {
@@ -47,6 +48,7 @@ const BACKEND_OPTS = ['claude', 'codex'] as const satisfies readonly SummarizeBa
 
 const HOME_TAB = 'home';
 const JOURNAL_TAB = 'journal';
+const BOARD_TAB = 'board';
 const PINNED_KEY = 'aa.pinnedSessionIds';
 const ACTIVE_TAB_KEY = 'aa.activeTab';
 const TOAST_MS = 5000;
@@ -126,7 +128,7 @@ export function AppShell() {
   // (No stream needed for the Journal tab — pass undefined.)
   const streamId = activeTab === HOME_TAB
     ? activeId
-    : (activeTab === JOURNAL_TAB ? undefined : activeTab);
+    : (activeTab === JOURNAL_TAB || activeTab === BOARD_TAB ? undefined : activeTab);
   const { data: entries, loading: entriesLoading } = useEntries(streamId, streamRefreshKey);
 
   // ── Journal state ───────────────────────────────────────────────────────
@@ -293,7 +295,7 @@ export function AppShell() {
 
   // Which session is in focus (right pane on Home, or the tab view)?
   const homeSession = sessions.find((s) => s.id === activeId);
-  const tabSession = activeTab === HOME_TAB || activeTab === JOURNAL_TAB
+  const tabSession = activeTab === HOME_TAB || activeTab === JOURNAL_TAB || activeTab === BOARD_TAB
     ? undefined
     : sessions.find((s) => s.id === activeTab);
   const focusedSession = activeTab === HOME_TAB ? homeSession : tabSession;
@@ -330,7 +332,7 @@ export function AppShell() {
       }
       // ⌘W on a session tab — unpin + back to Home. (Journal tab is fixed.)
       if (!ev.shiftKey && !ev.altKey && (ev.key === 'w' || ev.key === 'W')) {
-        if (activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB) {
+        if (activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB && activeTab !== BOARD_TAB) {
           ev.preventDefault();
           togglePin(activeTab);
         }
@@ -346,8 +348,9 @@ export function AppShell() {
     return () => window.removeEventListener('keydown', onKey);
   }, [pinnedIds, activeTab, togglePin, focusedSession?.id]);
 
-  const inSessionTab = activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB;
+  const inSessionTab = activeTab !== HOME_TAB && activeTab !== JOURNAL_TAB && activeTab !== BOARD_TAB;
   const inJournalTab = activeTab === JOURNAL_TAB;
+  const inBoardTab = activeTab === BOARD_TAB;
 
   // Pick which session's proposals to show in the SessionDetail. On Home that's
   // the focused session; in a pinned tab it's the tab session.
@@ -414,7 +417,9 @@ export function AppShell() {
         loud={tw.liveLoud}
       />
 
-      {inJournalTab ? (
+      {inBoardTab ? (
+        <BoardView theme={tw.theme} onOpenSession={jumpToSession} />
+      ) : inJournalTab ? (
         <JournalView
           theme={tw.theme}
           journal={journal}

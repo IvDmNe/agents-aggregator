@@ -1,4 +1,3 @@
-import { Link } from '@tanstack/react-router';
 import { LivePip } from './AgentChip';
 import { monoFont, themes, type ThemeMode } from '../theme';
 
@@ -95,8 +94,6 @@ export function TopBar({ theme, liveCount, search, setSearch, onToggleTheme, onT
             {liveCount}
           </span>
         )}
-
-        <Link to="/board" style={{ ...btnStyle, textDecoration: 'none' }}>Board</Link>
 
         <button onClick={onToggleTweaks} style={btnStyle} aria-label="Tweaks" title="Tweaks">
           {compact ? '⚙' : 'Tweaks'}

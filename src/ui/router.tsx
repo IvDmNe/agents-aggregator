@@ -6,7 +6,6 @@ import {
 } from '@tanstack/react-router';
 import { z } from 'zod';
 import { AppShell } from './AppShell';
-import { BoardView } from './components/BoardView';
 
 const searchSchema = z.object({
   source: z.string().optional(),
@@ -34,13 +33,7 @@ export const sessionRoute = createRoute({
   component: () => <AppShell />,
 });
 
-export const boardRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/board',
-  component: () => <BoardView />,
-});
-
-const routeTree = rootRoute.addChildren([indexRoute, sessionRoute, boardRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sessionRoute]);
 
 export const router = createRouter({
   routeTree,

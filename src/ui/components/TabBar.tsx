@@ -46,6 +46,13 @@ export function TabBar({ theme, pinnedSessions, activeTab, setActiveTab, onUnpin
         kind="journal"
         loud={loud}
       />
+      <TabChip
+        theme={theme}
+        active={activeTab === 'board'}
+        onClick={() => setActiveTab('board')}
+        kind="board"
+        loud={loud}
+      />
       {pinnedSessions.map((s) => (
         <TabChip
           key={s.id}
@@ -67,7 +74,7 @@ interface TabChipProps {
   active: boolean;
   onClick: () => void;
   onClose?: (e: React.MouseEvent) => void;
-  kind?: 'home' | 'journal';
+  kind?: 'home' | 'journal' | 'board';
   session?: TabSession;
   loud: boolean;
 }
@@ -76,7 +83,8 @@ function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: Ta
   const t = themes[theme];
   const isHome = kind === 'home';
   const isJournal = kind === 'journal';
-  const isFixed = isHome || isJournal;
+  const isBoard = kind === 'board';
+  const isFixed = isHome || isJournal || isBoard;
 
   const railColor = isFixed ? t.accent : (s ? AGENT_HUES[theme][s.agent].fg : t.accent);
 
@@ -128,6 +136,20 @@ function TabChip({ theme, active, onClick, onClose, kind, session: s, loud }: Ta
             </svg>
           </span>
           <span style={{ fontWeight: 500 }}>Journal</span>
+        </>
+      ) : isBoard ? (
+        <>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 14, height: 14, color: active ? t.fg : t.dim,
+          }}>
+            <svg viewBox="0 0 16 16" width={13} height={13} fill="none" stroke="currentColor" strokeWidth={1.4}>
+              <rect x="2" y="2.5" width="3.5" height="11" rx="1" />
+              <rect x="6.25" y="2.5" width="3.5" height="7" rx="1" />
+              <rect x="10.5" y="2.5" width="3.5" height="9" rx="1" />
+            </svg>
+          </span>
+          <span style={{ fontWeight: 500 }}>Board</span>
         </>
       ) : !s ? null : (
         <>
