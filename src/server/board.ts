@@ -6,6 +6,12 @@ import type { BoardEntry, LastKind, Session } from '../shared/types';
  * Pure: caller supplies `isAlive` (tmux liveness) and `nowMs` so this is
  * fully testable.
  */
+export function parseWindowH(raw: string | null): number {
+  if (raw === null) return 6;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 6;
+}
+
 export function buildBoard(
   sessions: Session[],
   isAlive: (agent: string, cwd: string) => boolean,

@@ -31,3 +31,11 @@ test('old tool_pending but pane still alive => needs-approval', () => {
 test('unknown kind never lands in needs-* columns', () => {
   assert.equal(deriveColumn({ ageSec: 60, lastKind: 'unknown', paneAlive: true }), 'done');
 });
+
+test('exactly RUNNING_SEC is no longer running', () => {
+  assert.equal(deriveColumn({ ageSec: RUNNING_SEC, lastKind: 'turn_done', paneAlive: false }), 'needs-input');
+});
+
+test('exactly STALL_MAX_SEC with dead pane => done', () => {
+  assert.equal(deriveColumn({ ageSec: STALL_MAX_SEC, lastKind: 'turn_done', paneAlive: false }), 'done');
+});

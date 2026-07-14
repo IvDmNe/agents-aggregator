@@ -155,7 +155,7 @@ export async function sendInput(target: string, text: string): Promise<void> {
 }
 
 /**
- * Set of `${agent}\0${resolvedCwd}` keys for every tmux pane currently running
+ * Set of `${agent} ${resolvedCwd}` keys for every tmux pane currently running
  * a known agent. One `listPanes()` + process-tree walk; used by the board to
  * decide `paneAlive` for all sessions in a single pass.
  */

@@ -10,7 +10,7 @@ import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
 import { livePaneKeys, resolveTargetForSession, sendInput } from './tmux';
 import { distill } from './distill';
-import { buildBoard } from './board';
+import { buildBoard, parseWindowH } from './board';
 import { complete, summarize, type Backend } from './summarize';
 import { log } from './logger';
 import type { AgentType, JournalItem, JournalKind } from '../shared/types';
@@ -42,7 +42,7 @@ app.get('/api/sessions', (c) => {
 
 app.get('/api/board', (c) => {
   const url = new URL(c.req.url);
-  const windowH = Number(url.searchParams.get('windowH') ?? '6') || 6;
+  const windowH = parseWindowH(url.searchParams.get('windowH'));
   const rows = sessionsRepo.list();
   const sessions = rows.map(({ filePath: _fp, ...rest }) => rest);
   const keys = livePaneKeys();

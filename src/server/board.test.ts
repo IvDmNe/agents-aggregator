@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildBoard } from './board';
+import { buildBoard, parseWindowH } from './board';
 import type { Session } from '../shared/types';
 
 const NOW = Date.parse('2026-07-14T12:00:00Z');
@@ -40,3 +40,8 @@ test('carries lastLine and live through to the entry', () => {
   assert.equal(r[0].lastLine, 'running tests');
   assert.equal(r[0].live, true);
 });
+
+test('parseWindowH: missing param defaults to 6', () => { assert.equal(parseWindowH(null), 6); });
+test('parseWindowH: "0" stays 0 (live-only)', () => { assert.equal(parseWindowH('0'), 0); });
+test('parseWindowH: "24" parses to 24', () => { assert.equal(parseWindowH('24'), 24); });
+test('parseWindowH: non-numeric falls back to 6', () => { assert.equal(parseWindowH('abc'), 6); });
