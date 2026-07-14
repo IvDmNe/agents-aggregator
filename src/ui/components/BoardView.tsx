@@ -18,9 +18,21 @@ const WINDOWS: { label: string; hours: number }[] = [
   { label: 'Live-only', hours: 0 },
 ];
 
+const WINDOW_KEY = 'aa.boardWindowH';
+function loadWindowH(): number {
+  try {
+    const v = Number(localStorage.getItem(WINDOW_KEY));
+    return Number.isFinite(v) && v >= 0 ? v : 6;
+  } catch { return 6; }
+}
+
 export function BoardView({ theme, onOpenSession }: { theme: ThemeMode; onOpenSession: (id: string) => void }) {
   const t = themes[theme];
-  const [windowH, setWindowH] = useState(6);
+  const [windowH, setWindowHState] = useState<number>(loadWindowH);
+  const setWindowH = (h: number) => {
+    setWindowHState(h);
+    try { localStorage.setItem(WINDOW_KEY, String(h)); } catch { /* ignore */ }
+  };
   const [refreshKey, setRefreshKey] = useState(0);
   useEventStream(() => setRefreshKey((k) => k + 1));
   const { data, error } = useBoard(windowH, refreshKey);

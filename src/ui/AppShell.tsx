@@ -42,7 +42,7 @@ import {
   TweakToggle,
   TweaksPanel,
 } from './components/TweaksPanel';
-import { indexRoute, sessionRoute } from './router';
+import { boardRoute, indexRoute, journalRoute, sessionRoute } from './router';
 
 const THEME_OPTS = ['dark', 'light'] as const satisfies readonly ThemeMode[];
 const DENSITY_OPTS = ['compact', 'comfy'] as const satisfies readonly Density[];
@@ -53,7 +53,6 @@ const HOME_TAB = 'home';
 const JOURNAL_TAB = 'journal';
 const BOARD_TAB = 'board';
 const PINNED_KEY = 'aa.pinnedSessionIds';
-const ACTIVE_TAB_KEY = 'aa.activeTab';
 const TOAST_MS = 5000;
 
 function loadPinned(): string[] {
@@ -64,22 +63,29 @@ function loadPinned(): string[] {
     return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
   } catch { return []; }
 }
-function loadActiveTab(): string {
-  try { return localStorage.getItem(ACTIVE_TAB_KEY) || HOME_TAB; } catch { return HOME_TAB; }
-}
 
 /**
- * Reads `activeId` from the URL path and `source`/`q` from the search params.
- * Both routes render this same shell.
+ * Tab state is URL-driven so browser back/forward step through tabs:
+ *   /            → Home (master-detail; selected session in ?sel=<id>)
+ *   /journal     → Journal
+ *   /board       → Board
+ *   /session/$id → a focused (full-width) session tab
  */
 export function AppShell() {
   const navigate = useNavigate();
 
-  // Either the session route is active and supplies an id, or we're on '/'.
   const sessionMatch = useMatch({ from: sessionRoute.id, shouldThrow: false });
+  const journalMatch = useMatch({ from: journalRoute.id, shouldThrow: false });
+  const boardMatch = useMatch({ from: boardRoute.id, shouldThrow: false });
   const indexMatch = useMatch({ from: indexRoute.id, shouldThrow: false });
-  const activeId = sessionMatch?.params.id;
-  const search = (sessionMatch?.search ?? indexMatch?.search ?? {}) as { source?: string; q?: string; project?: string };
+
+  const sessionTabId = sessionMatch?.params.id;      // focused session tab (path)
+  const search = (sessionMatch?.search ?? journalMatch?.search ?? boardMatch?.search ?? indexMatch?.search ?? {}) as { source?: string; q?: string; project?: string; sel?: string };
+  const homeSelId = indexMatch ? search.sel : undefined; // session selected on Home
+  const activeTab = sessionTabId ?? (boardMatch ? BOARD_TAB : journalMatch ? JOURNAL_TAB : HOME_TAB);
+  const isHome = !!indexMatch;
+  // Session whose live transcript this view streams (Home selection or focused tab).
+  const activeId = sessionTabId ?? homeSelId;
   const sourceFilter = search.source ?? null;
   const projectFilter = search.project ?? null;
   const searchQ = search.q ?? '';
@@ -92,13 +98,17 @@ export function AppShell() {
 
   // ── Tabs state (persisted) ─────────────────────────────────────────────
   const [pinnedIds, setPinnedIds] = useState<string[]>(loadPinned);
-  const [activeTab, setActiveTab] = useState<string>(loadActiveTab);
   useEffect(() => {
     try { localStorage.setItem(PINNED_KEY, JSON.stringify(pinnedIds)); } catch { /* ignore */ }
   }, [pinnedIds]);
-  useEffect(() => {
-    try { localStorage.setItem(ACTIVE_TAB_KEY, activeTab); } catch { /* ignore */ }
-  }, [activeTab]);
+
+  // Switching a tab = navigating, so browser history records it.
+  const setActiveTab = useCallback((tab: string) => {
+    if (tab === HOME_TAB) void navigate({ to: '/', search: (prev) => prev });
+    else if (tab === JOURNAL_TAB) void navigate({ to: '/journal', search: (prev) => prev });
+    else if (tab === BOARD_TAB) void navigate({ to: '/board', search: (prev) => prev });
+    else void navigate({ to: '/session/$id', params: { id: tab }, search: (prev) => prev });
+  }, [navigate]);
 
   const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(undefined);
   const [tweaksOpen, setTweaksOpen] = useState<boolean>(false);
@@ -128,12 +138,9 @@ export function AppShell() {
   const { data: projects } = useProjects({ sourceId: sourceFilter, q: searchQ || undefined }, refreshKey);
   const { data: sessions } = useSessions({ sourceId: sourceFilter, project: projectFilter, q: searchQ || undefined }, refreshKey);
 
-  // The live-stream subscription follows whichever session is being shown:
-  // pinned tab's session if in tab view, else Home's selected session.
-  // (No stream needed for the Journal tab — pass undefined.)
-  const streamId = activeTab === HOME_TAB
-    ? activeId
-    : (activeTab === JOURNAL_TAB || activeTab === BOARD_TAB ? undefined : activeTab);
+  // The live-stream follows the shown session: focused tab, or Home's selection.
+  // (undefined on Journal/Board — activeId is undefined there.)
+  const streamId = activeId;
   const { data: entries, loading: entriesLoading } = useEntries(streamId, streamRefreshKey);
 
   // ── Journal state ───────────────────────────────────────────────────────
@@ -164,17 +171,16 @@ export function AppShell() {
   // we're in a tab view (pinned or journal).
   useEffect(() => {
     if (bp === 'sm') return;
-    if (activeTab !== HOME_TAB) return;
+    if (!isHome) return;
     if (pendingLaunch) return;
-    if (!activeId && sessions.length > 0) {
+    if (!homeSelId && sessions.length > 0) {
       void navigate({
-        to: '/session/$id',
-        params: { id: sessions[0].id },
-        search: (prev) => prev,
+        to: '/',
+        search: (prev) => ({ ...prev, sel: sessions[0].id }),
         replace: true,
       });
     }
-  }, [activeId, sessions, navigate, bp, activeTab, pendingLaunch]);
+  }, [homeSelId, sessions, navigate, bp, isHome, pendingLaunch]);
 
   // Once a just-launched agent writes its session, swap the pending compose
   // view for the real transcript.
@@ -183,18 +189,18 @@ export function AppShell() {
     const id = findLaunchedSession(sessions, pendingLaunch);
     if (id) {
       setPendingLaunch(null);
-      setActiveTab(HOME_TAB);
       void navigate({ to: '/session/$id', params: { id }, search: (prev) => prev, replace: true });
     }
   }, [pendingLaunch, sessions, navigate]);
 
   const goToList = useCallback(() => {
-    void navigate({ to: '/', search: (prev) => prev, replace: true });
+    void navigate({ to: '/', search: (prev) => ({ ...prev, sel: undefined }), replace: true });
   }, [navigate]);
 
+  // Selecting a session on Home keeps you on Home ('/') and records it in ?sel.
   const setActiveId = useCallback((id: string) => {
     setSelectedEntryId(undefined);
-    void navigate({ to: '/session/$id', params: { id }, search: (prev) => prev });
+    void navigate({ to: '/', search: (prev) => ({ ...prev, sel: id }) });
   }, [navigate]);
 
   const setSourceFilter = useCallback((id: string | null) => {
@@ -216,29 +222,24 @@ export function AppShell() {
   // ── Tab helpers ─────────────────────────────────────────────────────────
   const isPinned = useCallback((id: string) => pinnedIds.includes(id), [pinnedIds]);
   const togglePin = useCallback((id: string) => {
-    setPinnedIds((arr) => {
-      if (arr.includes(id)) {
-        setActiveTab((cur) => (cur === id ? HOME_TAB : cur));
-        return arr.filter((x) => x !== id);
-      }
-      return [...arr, id];
-    });
-  }, []);
+    // If we're unpinning the focused session tab, fall back to Home.
+    if (pinnedIds.includes(id) && sessionTabId === id) setActiveTab(HOME_TAB);
+    setPinnedIds((arr) => (arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]));
+  }, [pinnedIds, sessionTabId, setActiveTab]);
   const openInTab = useCallback((id: string) => {
     setPinnedIds((arr) => (arr.includes(id) ? arr : [...arr, id]));
     setActiveTab(id);
-  }, []);
-  const goHomeTab = useCallback(() => setActiveTab(HOME_TAB), []);
+  }, [setActiveTab]);
+  const goHomeTab = useCallback(() => setActiveTab(HOME_TAB), [setActiveTab]);
 
   // ── Journal handlers ────────────────────────────────────────────────────
   const jumpToJournal = useCallback((projectKey: string) => {
     setJournalProjectKey(projectKey);
     setActiveTab(JOURNAL_TAB);
-  }, []);
+  }, [setActiveTab]);
 
   const jumpToSession = useCallback((sessionId: string) => {
-    setActiveTab(HOME_TAB);
-    void navigate({ to: '/session/$id', params: { id: sessionId }, search: (prev) => prev });
+    void navigate({ to: '/', search: (prev) => ({ ...prev, sel: sessionId }) });
   }, [navigate]);
 
   const handleCapture = useCallback((entry: Entry, kind: JournalKind, session: Session, overrideText?: string) => {
@@ -311,12 +312,10 @@ export function AppShell() {
   }, [streamId]);
   useEventStream(onEvent);
 
-  // Which session is in focus (right pane on Home, or the tab view)?
-  const homeSession = sessions.find((s) => s.id === activeId);
-  const tabSession = activeTab === HOME_TAB || activeTab === JOURNAL_TAB || activeTab === BOARD_TAB
-    ? undefined
-    : sessions.find((s) => s.id === activeTab);
-  const focusedSession = activeTab === HOME_TAB ? homeSession : tabSession;
+  // Which session is in focus (right pane on Home, or the focused tab view)?
+  const homeSession = sessions.find((s) => s.id === homeSelId);
+  const tabSession = sessionTabId ? sessions.find((s) => s.id === sessionTabId) : undefined;
+  const focusedSession = sessionTabId ? tabSession : (isHome ? homeSession : undefined);
   const selectedEntry =
     entries.find((e) => e.id === selectedEntryId) || entries[entries.length - 1];
 

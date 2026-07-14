@@ -11,6 +11,9 @@ const searchSchema = z.object({
   source: z.string().optional(),
   project: z.string().optional(),
   q: z.string().optional(),
+  // Session selected in the Home tab's detail pane (Home is a master-detail;
+  // a *focused* session tab uses the /session/$id path instead).
+  sel: z.string().optional(),
 });
 
 export type AppSearch = z.infer<typeof searchSchema>;
@@ -26,6 +29,20 @@ export const indexRoute = createRoute({
   component: () => <AppShell />,
 });
 
+export const journalRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/journal',
+  validateSearch: searchSchema,
+  component: () => <AppShell />,
+});
+
+export const boardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/board',
+  validateSearch: searchSchema,
+  component: () => <AppShell />,
+});
+
 export const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/session/$id',
@@ -33,7 +50,7 @@ export const sessionRoute = createRoute({
   component: () => <AppShell />,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sessionRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, journalRoute, boardRoute, sessionRoute]);
 
 export const router = createRouter({
   routeTree,
