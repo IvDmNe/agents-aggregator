@@ -54,7 +54,7 @@ export function BoardView() {
         ))}
       </div>
       {error && <div style={{ padding: 12, color: '#E5484D', fontSize: 12 }}>{error.message}</div>}
-      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+      <div style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
                     gap: 12, padding: 12, overflow: 'hidden' }}>
         {COLUMNS.map((col) => {
           const items = byColumn(col.key);
