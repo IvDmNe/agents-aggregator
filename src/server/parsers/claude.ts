@@ -104,27 +104,22 @@ export function isSubagentSessionFile(filePath: string): boolean {
 
 export function deriveLastActivity(lines: ClaudeLine[]): { kind: LastKind; line: string } {
   let last: ClaudeMessageLine | null = null;
-  const toolUseIds = new Set<string>();
-  const toolResultIds = new Set<string>();
   for (const l of lines) {
     if (l.type !== 'user' && l.type !== 'assistant') continue;
     const m = l as ClaudeMessageLine;
     if (m.isSidechain) continue;
     last = m;
-    const content = m.message?.content;
-    if (Array.isArray(content)) {
-      for (const b of content) {
-        if (b.type === 'tool_use') toolUseIds.add(b.id);
-        else if (b.type === 'tool_result') toolResultIds.add(b.tool_use_id);
-      }
-    }
   }
   if (!last) return { kind: 'unknown', line: '' };
-  let pending = false;
-  for (const id of toolUseIds) if (!toolResultIds.has(id)) { pending = true; break; }
-  const text = tcToString(last.message?.content).replace(/\s+/g, ' ').trim().slice(0, 200);
+  const content = last.message?.content;
+  const text = tcToString(content).replace(/\s+/g, ' ').trim().slice(0, 200);
   if (last.type === 'assistant') {
-    if (pending) return { kind: 'tool_pending', line: text || '(tool call)' };
+    // A tool_use in the final assistant turn has no result yet — results arrive
+    // in a following user message — so the agent's most recent action is a
+    // pending tool call. Only the last turn matters: an orphaned/aborted tool
+    // call earlier in the session must not keep a finished turn "pending".
+    const hasToolUse = Array.isArray(content) && content.some((b) => b.type === 'tool_use');
+    if (hasToolUse) return { kind: 'tool_pending', line: text || '(tool call)' };
     return { kind: 'turn_done', line: text };
   }
   return { kind: 'working', line: text };

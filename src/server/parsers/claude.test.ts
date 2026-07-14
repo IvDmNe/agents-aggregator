@@ -44,6 +44,14 @@ test('no messages => unknown', () => {
   assert.equal(deriveLastActivity([]).kind, 'unknown');
 });
 
+test('orphaned earlier tool_use does not keep a finished turn pending', () => {
+  const r = deriveLastActivity([
+    asst([{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }]), // never answered
+    asst([{ type: 'text', text: 'finished anyway' }]),
+  ]);
+  assert.equal(r.kind, 'turn_done');
+});
+
 test('isSubagentSessionFile: true for a file under a subagents/ dir', () => {
   assert.equal(
     isSubagentSessionFile('/home/u/.claude/projects/-p/uuid/subagents/agent-abc.jsonl'),

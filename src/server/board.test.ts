@@ -15,28 +15,37 @@ function sess(over: Partial<Session>): Session {
 }
 
 const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+const no = () => false;
+const atP = (agent: string, cwd: string) => agent === 'claude' && cwd === '/p';
 
 test('drops sessions outside window and not live', () => {
-  const r = buildBoard([sess({ updatedAt: iso(12 * 3600 * 1000), live: false })], () => false, NOW, 6);
+  const r = buildBoard([sess({ updatedAt: iso(12 * 3600 * 1000), live: false })], no, no, NOW, 6);
   assert.equal(r.length, 0);
 });
 
 test('keeps live session even if old', () => {
-  const r = buildBoard([sess({ updatedAt: iso(48 * 3600 * 1000), live: true })], () => false, NOW, 6);
+  const r = buildBoard([sess({ updatedAt: iso(48 * 3600 * 1000), live: true })], no, no, NOW, 6);
   assert.equal(r.length, 1);
 });
 
-test('classifies tool_pending on a live pane as needs-approval', () => {
+test('tool_pending with a confirmed approval prompt => needs-approval', () => {
   const r = buildBoard(
     [sess({ updatedAt: iso(60_000), lastKind: 'tool_pending', cwd: '/p' })],
-    (agent, cwd) => agent === 'claude' && cwd === '/p',
-    NOW, 6,
+    atP, atP, NOW, 6, // alive AND awaiting approval
   );
   assert.equal(r[0].column, 'needs-approval');
 });
 
+test('tool_pending on a live pane with NO prompt => running (tool executing)', () => {
+  const r = buildBoard(
+    [sess({ updatedAt: iso(60_000), lastKind: 'tool_pending', cwd: '/p' })],
+    atP, no, NOW, 6, // alive but no prompt on screen
+  );
+  assert.equal(r[0].column, 'running');
+});
+
 test('carries lastLine and live through to the entry', () => {
-  const r = buildBoard([sess({ updatedAt: iso(60_000), lastLine: 'running tests', live: true })], () => false, NOW, 6);
+  const r = buildBoard([sess({ updatedAt: iso(60_000), lastLine: 'running tests', live: true })], no, no, NOW, 6);
   assert.equal(r[0].lastLine, 'running tests');
   assert.equal(r[0].live, true);
 });

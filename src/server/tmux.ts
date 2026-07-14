@@ -154,21 +154,58 @@ export async function sendInput(target: string, text: string): Promise<void> {
   await execFileP('tmux', ['send-keys', '-t', target, 'Enter']);
 }
 
+/** Capture the visible text of a tmux pane (plain, no escape codes). */
+function capturePane(target: string): string {
+  try {
+    return execFileSync('tmux', ['capture-pane', '-p', '-t', target], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+  } catch {
+    return '';
+  }
+}
+
 /**
- * Set of `${agent} ${resolvedCwd}` keys for every tmux pane currently running
- * a known agent. One `listPanes()` + process-tree walk; used by the board to
- * decide `paneAlive` for all sessions in a single pass.
+ * Heuristic: does captured pane text show a coding-agent permission prompt?
+ * Agents render a boxed question ("Do you want to …?") with a numbered choice
+ * list whose first option is a highlighted "1. Yes". Requiring both a question
+ * and the Yes-choice keeps normal working output (spinners, tool logs) from
+ * false-matching. Exported for testing.
  */
-export function livePaneKeys(): Set<string> {
-  const keys = new Set<string>();
+export function looksLikeApprovalPrompt(text: string): boolean {
+  if (!text) return false;
+  const hasQuestion = /Do you want to\b/i.test(text) || /Allow .+\?/i.test(text);
+  const hasYesChoice = /(❯\s*)?\b1\.\s*Yes\b/.test(text);
+  return hasQuestion && hasYesChoice;
+}
+
+export interface PaneSignals {
+  /** `${agent} ${resolvedCwd}` keys for panes running a known agent. */
+  alive: Set<string>;
+  /** Subset of `alive` whose pane is currently showing a permission prompt. */
+  approval: Set<string>;
+}
+
+/**
+ * Walk every tmux pane once and, for each running a known agent, record its
+ * `${agent} ${resolvedCwd}` key as alive — and, if its visible content shows a
+ * permission prompt, as awaiting approval. One pass powers both board signals.
+ */
+export function paneSignals(): PaneSignals {
+  const alive = new Set<string>();
+  const approval = new Set<string>();
   const agents = Object.keys(AGENT_BINARIES) as AgentType[];
   for (const pane of listPanes()) {
     for (const agent of agents) {
       const pid = findDescendantMatching(pane.panePid, AGENT_BINARIES[agent]);
       if (!pid) continue;
       const cwd = readProcCwd(pid);
-      if (cwd) keys.add(`${agent} ${path.resolve(cwd)}`);
+      if (!cwd) continue;
+      const key = `${agent} ${path.resolve(cwd)}`;
+      alive.add(key);
+      if (looksLikeApprovalPrompt(capturePane(pane.target))) approval.add(key);
     }
   }
-  return keys;
+  return { alive, approval };
 }

@@ -7,12 +7,20 @@ test('recent activity => running regardless of kind', () => {
   assert.equal(deriveColumn({ ageSec: RUNNING_SEC - 1, lastKind: 'tool_pending', paneAlive: false }), 'running');
 });
 
-test('tool_pending on live pane => needs-approval', () => {
-  assert.equal(deriveColumn({ ageSec: 60, lastKind: 'tool_pending', paneAlive: true }), 'needs-approval');
+test('tool_pending with a confirmed prompt => needs-approval', () => {
+  assert.equal(deriveColumn({ ageSec: 60, lastKind: 'tool_pending', paneAlive: true, awaitingApproval: true }), 'needs-approval');
 });
 
-test('tool_pending within stall window (dead pane) => needs-approval', () => {
-  assert.equal(deriveColumn({ ageSec: 60, lastKind: 'tool_pending', paneAlive: false }), 'needs-approval');
+test('tool_pending on a live pane with NO prompt => running (tool executing)', () => {
+  assert.equal(deriveColumn({ ageSec: 60, lastKind: 'tool_pending', paneAlive: true, awaitingApproval: false }), 'running');
+});
+
+test('tool_pending, no pane, recent, no prompt => running (assume executing)', () => {
+  assert.equal(deriveColumn({ ageSec: 60, lastKind: 'tool_pending', paneAlive: false }), 'running');
+});
+
+test('confirmed prompt beats age — old tool_pending still needs-approval', () => {
+  assert.equal(deriveColumn({ ageSec: STALL_MAX_SEC + 1, lastKind: 'tool_pending', paneAlive: true, awaitingApproval: true }), 'needs-approval');
 });
 
 test('turn_done within stall window => needs-input', () => {
@@ -22,10 +30,6 @@ test('turn_done within stall window => needs-input', () => {
 test('old + dead => done', () => {
   assert.equal(deriveColumn({ ageSec: STALL_MAX_SEC + 1, lastKind: 'turn_done', paneAlive: false }), 'done');
   assert.equal(deriveColumn({ ageSec: STALL_MAX_SEC + 1, lastKind: 'tool_pending', paneAlive: false }), 'done');
-});
-
-test('old tool_pending but pane still alive => needs-approval', () => {
-  assert.equal(deriveColumn({ ageSec: STALL_MAX_SEC + 1, lastKind: 'tool_pending', paneAlive: true }), 'needs-approval');
 });
 
 test('unknown kind never lands in needs-* columns', () => {

@@ -12,19 +12,33 @@ export interface ColumnInput {
   lastKind: LastKind;
   /** True if an agent process for this session is alive in a tmux pane. */
   paneAlive: boolean;
+  /**
+   * True only when the agent's tmux pane is *confirmed* showing a permission
+   * prompt (via capture-pane). This is the one signal that distinguishes a
+   * genuine "needs approval" from an agent that is simply running a long tool
+   * call — both look like an unanswered tool_use in the JSONL. Defaults to
+   * false when there is no pane to inspect (e.g. agent not under tmux).
+   */
+  awaitingApproval?: boolean;
 }
 
 /**
  * Classify a session into a board column. Pure; first match wins.
  *
- * Rationale for needs-approval: an unanswered tool call on a still-alive (or
- * only-recently-stalled) process is most likely blocked on a permission prompt.
+ * needs-approval is only reported when a pane capture confirms a prompt is on
+ * screen — an unanswered tool_use alone means the agent is *executing* a tool
+ * (Running), not blocked. Without a pane to inspect we cannot tell the two
+ * apart, so we err toward Running rather than nagging the user for approval.
  */
 export function deriveColumn(i: ColumnInput): BoardColumn {
   if (i.ageSec < RUNNING_SEC) return 'running';
   const within = i.ageSec < STALL_MAX_SEC;
   const active = i.paneAlive || within;
-  if (i.lastKind === 'tool_pending' && active) return 'needs-approval';
+  if (i.lastKind === 'tool_pending') {
+    if (i.awaitingApproval) return 'needs-approval';
+    // Unanswered tool call with no confirmed prompt = a tool is executing.
+    return active ? 'running' : 'done';
+  }
   if (i.lastKind === 'turn_done' && active) return 'needs-input';
   return 'done';
 }

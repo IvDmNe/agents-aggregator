@@ -8,7 +8,7 @@ import { Readable } from 'node:stream';
 import { journalRepo, sessionsRepo, sourcesRepo, summariesRepo, type JournalItemRow } from './db';
 import { parserFor } from './parsers';
 import { subscribe } from './pubsub';
-import { livePaneKeys, resolveTargetForSession, sendInput } from './tmux';
+import { paneSignals, resolveTargetForSession, sendInput } from './tmux';
 import { distill } from './distill';
 import { buildBoard, parseWindowH } from './board';
 import { complete, summarize, type Backend } from './summarize';
@@ -45,10 +45,12 @@ app.get('/api/board', (c) => {
   const windowH = parseWindowH(url.searchParams.get('windowH'));
   const rows = sessionsRepo.list();
   const sessions = rows.map(({ filePath: _fp, ...rest }) => rest);
-  const keys = livePaneKeys();
+  const { alive, approval } = paneSignals();
   const isAlive = (agent: string, cwd: string) =>
-    keys.has(`${agent} ${path.resolve(cwd)}`);
-  const entries = buildBoard(sessions, isAlive, Date.now(), windowH);
+    alive.has(`${agent} ${path.resolve(cwd)}`);
+  const isAwaitingApproval = (agent: string, cwd: string) =>
+    approval.has(`${agent} ${path.resolve(cwd)}`);
+  const entries = buildBoard(sessions, isAlive, isAwaitingApproval, Date.now(), windowH);
   return c.json({ entries });
 });
 
