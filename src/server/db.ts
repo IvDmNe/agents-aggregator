@@ -13,6 +13,7 @@ export function getDb(): Database.Database {
   _db.pragma('journal_mode = WAL');
   _db.pragma('foreign_keys = ON');
   initSchema(_db);
+  applyMigrations(_db);
   return _db;
 }
 
@@ -41,6 +42,8 @@ function initSchema(db: Database.Database): void {
       branches      INTEGER NOT NULL DEFAULT 0,
       live          INTEGER NOT NULL DEFAULT 0,
       status        TEXT,
+      lastKind      TEXT,
+      lastLine      TEXT,
       PRIMARY KEY (sourceId, sessionId)
     );
 
@@ -81,6 +84,13 @@ function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS journal_item_by_project ON journal_item(projectKey);
     CREATE INDEX IF NOT EXISTS journal_item_by_created ON journal_item(createdAt DESC);
   `);
+}
+
+export function applyMigrations(db: Database.Database): void {
+  const cols = db.prepare(`PRAGMA table_info(session)`).all() as { name: string }[];
+  const names = new Set(cols.map((c) => c.name));
+  if (!names.has('lastKind')) db.exec(`ALTER TABLE session ADD COLUMN lastKind TEXT`);
+  if (!names.has('lastLine')) db.exec(`ALTER TABLE session ADD COLUMN lastLine TEXT`);
 }
 
 interface SourceRow {
@@ -136,6 +146,8 @@ export interface SessionRow {
   branches: number;
   live: number;
   status: string | null;
+  lastKind: string | null;
+  lastLine: string | null;
 }
 
 function rowToSession(r: SessionRow): Session & { filePath: string } {
@@ -153,6 +165,8 @@ function rowToSession(r: SessionRow): Session & { filePath: string } {
     live: !!r.live,
     branches: r.branches,
     status: r.status ?? 'idle',
+    lastKind: (r.lastKind ?? 'unknown') as Session['lastKind'],
+    lastLine: r.lastLine ?? '',
     filePath: r.filePath,
   };
 }
@@ -162,15 +176,16 @@ export const sessionsRepo = {
     getDb()
       .prepare(
         `INSERT INTO session(sourceId,sessionId,agent,filePath,cwd,name,model,
-                             startedAt,updatedAt,messageCount,costUsd,branches,live,status)
+                             startedAt,updatedAt,messageCount,costUsd,branches,live,status,lastKind,lastLine)
          VALUES (@sourceId,@sessionId,@agent,@filePath,@cwd,@name,@model,
-                 @startedAt,@updatedAt,@messageCount,@costUsd,@branches,@live,@status)
+                 @startedAt,@updatedAt,@messageCount,@costUsd,@branches,@live,@status,@lastKind,@lastLine)
          ON CONFLICT(sourceId,sessionId) DO UPDATE SET
            agent=excluded.agent, filePath=excluded.filePath, cwd=excluded.cwd,
            name=excluded.name, model=excluded.model, startedAt=excluded.startedAt,
            updatedAt=excluded.updatedAt, messageCount=excluded.messageCount,
            costUsd=excluded.costUsd, branches=excluded.branches,
-           live=excluded.live, status=excluded.status`,
+           live=excluded.live, status=excluded.status,
+           lastKind=excluded.lastKind, lastLine=excluded.lastLine`,
       )
       .run(row);
   },

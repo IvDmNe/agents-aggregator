@@ -49,6 +49,8 @@ export async function indexSource(src: Source): Promise<number> {
         branches: meta.branches,
         live: meta.live ? 1 : 0,
         status: meta.status,
+        lastKind: meta.lastKind ?? null,
+        lastLine: meta.lastLine ?? null,
       };
       sessionsRepo.upsert(row);
       n++;
@@ -84,6 +86,8 @@ export async function reindexFile(sourceId: string, filePath: string): Promise<s
       branches: meta.branches,
       live: 1,
       status: 'streaming',
+      lastKind: meta.lastKind ?? null,
+      lastLine: meta.lastLine ?? null,
     });
     return sessionId;
   } catch (err) {
