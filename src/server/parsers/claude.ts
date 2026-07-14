@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { composeSessionId, type Entry, type EntryImage, type Session } from '../../shared/types';
+import { composeSessionId, type Entry, type EntryImage, type LastKind, type Session } from '../../shared/types';
 import type { Parser, SessionFile } from './base';
 
 interface ClaudeAssistantUsage {
@@ -91,6 +91,34 @@ function previewFromInput(name: string, input: Record<string, unknown>): string 
   return JSON.stringify(picked);
 }
 
+export function deriveLastActivity(lines: ClaudeLine[]): { kind: LastKind; line: string } {
+  let last: ClaudeMessageLine | null = null;
+  const toolUseIds = new Set<string>();
+  const toolResultIds = new Set<string>();
+  for (const l of lines) {
+    if (l.type !== 'user' && l.type !== 'assistant') continue;
+    const m = l as ClaudeMessageLine;
+    if (m.isSidechain) continue;
+    last = m;
+    const content = m.message?.content;
+    if (Array.isArray(content)) {
+      for (const b of content) {
+        if (b.type === 'tool_use') toolUseIds.add(b.id);
+        else if (b.type === 'tool_result') toolResultIds.add(b.tool_use_id);
+      }
+    }
+  }
+  if (!last) return { kind: 'unknown', line: '' };
+  let pending = false;
+  for (const id of toolUseIds) if (!toolResultIds.has(id)) { pending = true; break; }
+  const text = tcToString(last.message?.content).replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (last.type === 'assistant') {
+    if (pending) return { kind: 'tool_pending', line: text || '(tool call)' };
+    return { kind: 'turn_done', line: text };
+  }
+  return { kind: 'working', line: text };
+}
+
 export const claudeParser: Parser = {
   agent: 'claude',
 
@@ -138,6 +166,7 @@ export const claudeParser: Parser = {
     }
     const stat = fs.statSync(filePath);
     const sessionId = path.basename(filePath, '.jsonl');
+    const activity = deriveLastActivity(lines);
     return {
       id: composeSessionId(sourceId, sessionId),
       sourceId,
@@ -152,6 +181,8 @@ export const claudeParser: Parser = {
       live: false,
       branches: 0,
       status: 'idle',
+      lastKind: activity.kind,
+      lastLine: activity.line,
       filePath,
     };
   },
