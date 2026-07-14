@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deriveLastActivity } from './claude';
+import { deriveLastActivity, isSubagentSessionFile } from './claude';
 
 function asst(content: unknown[], extra: Record<string, unknown> = {}) {
   return { type: 'assistant', uuid: 'a', parentUuid: null, timestamp: '2026-07-14T00:00:00Z',
@@ -42,4 +42,25 @@ test('sidechain lines are ignored', () => {
 
 test('no messages => unknown', () => {
   assert.equal(deriveLastActivity([]).kind, 'unknown');
+});
+
+test('isSubagentSessionFile: true for a file under a subagents/ dir', () => {
+  assert.equal(
+    isSubagentSessionFile('/home/u/.claude/projects/-p/uuid/subagents/agent-abc.jsonl'),
+    true,
+  );
+});
+
+test('isSubagentSessionFile: false for a normal top-level session file', () => {
+  assert.equal(
+    isSubagentSessionFile('/home/u/.claude/projects/-p/uuid.jsonl'),
+    false,
+  );
+});
+
+test('isSubagentSessionFile: does not match a project dir merely containing the substring', () => {
+  assert.equal(
+    isSubagentSessionFile('/home/u/.claude/projects/-my-subagents-tool/uuid.jsonl'),
+    false,
+  );
 });

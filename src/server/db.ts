@@ -192,6 +192,13 @@ export const sessionsRepo = {
   deleteForSource(sourceId: string): void {
     getDb().prepare(`DELETE FROM session WHERE sourceId = ?`).run(sourceId);
   },
+  /** Remove Claude subagent transcript rows (files under a `subagents/` dir). */
+  deleteSubagentSessions(): number {
+    const r = getDb()
+      .prepare(`DELETE FROM session WHERE filePath LIKE '%' || ? || '%'`)
+      .run(`${path.sep}subagents${path.sep}`);
+    return r.changes;
+  },
   list(opts: { sourceId?: string | null; agent?: string | null; q?: string | null; project?: string | null } = {}): (Session & { filePath: string })[] {
     const where: string[] = [];
     const params: Record<string, unknown> = {};

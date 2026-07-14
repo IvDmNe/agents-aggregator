@@ -91,6 +91,17 @@ function previewFromInput(name: string, input: Record<string, unknown>): string 
   return JSON.stringify(picked);
 }
 
+/**
+ * Claude stores subagent (Task) transcripts under a `subagents/` directory
+ * next to their parent session. Every line in them is `isSidechain`, so the
+ * parser renders them as empty "(no cwd)" sessions with 0 messages. They are
+ * not real sessions and should not be indexed. The recursive file watcher is
+ * what picks them up (the initial one-level scan never enters the subdir).
+ */
+export function isSubagentSessionFile(filePath: string): boolean {
+  return filePath.split(path.sep).includes('subagents');
+}
+
 export function deriveLastActivity(lines: ClaudeLine[]): { kind: LastKind; line: string } {
   let last: ClaudeMessageLine | null = null;
   const toolUseIds = new Set<string>();

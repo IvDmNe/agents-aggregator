@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { sessionsRepo, sourcesRepo, type SessionRow } from './db';
 import { parserFor } from './parsers';
+import { isSubagentSessionFile } from './parsers/claude';
 import { splitSessionId, type Source } from '../shared/types';
 import { resolveRoot } from './config';
 import { log } from './logger';
@@ -15,6 +16,10 @@ export async function indexAll(): Promise<{ scanned: number; sources: number }> 
   for (const src of sources) {
     scanned += await indexSource(src);
   }
+  // Purge any Claude subagent transcripts a previous run's watcher indexed
+  // before we started filtering them out.
+  const purged = sessionsRepo.deleteSubagentSessions();
+  if (purged > 0) log.info({ purged }, 'removed subagent transcript rows');
   return { scanned, sources: sources.length };
 }
 
@@ -65,6 +70,9 @@ export async function indexSource(src: Source): Promise<number> {
 export async function reindexFile(sourceId: string, filePath: string): Promise<string | null> {
   const src = sourcesRepo.list().find((s) => s.id === sourceId);
   if (!src) return null;
+  // Skip Claude subagent (Task) transcripts — the recursive watcher surfaces
+  // them but they are all-sidechain and not real sessions.
+  if (src.agent === 'claude' && isSubagentSessionFile(filePath)) return null;
   const parser = parserFor(src.agent);
   if (!parser) return null;
   if (!fs.existsSync(filePath)) return null;
