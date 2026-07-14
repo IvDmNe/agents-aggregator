@@ -23,6 +23,18 @@ export interface Session {
   live: boolean;
   branches: number;
   status: 'streaming' | 'tool' | 'idle' | string;
+  lastKind?: LastKind;
+  lastLine?: string;
+}
+
+export type LastKind = 'tool_pending' | 'turn_done' | 'working' | 'unknown';
+export type BoardColumn = 'running' | 'needs-input' | 'needs-approval' | 'done';
+
+export interface BoardEntry {
+  session: Session;
+  column: BoardColumn;
+  lastLine: string;
+  live: boolean;
 }
 
 export type EntryRole =
